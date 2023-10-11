@@ -25,6 +25,8 @@ var (
 	getSystemMetrics           = user32.NewProc("GetSystemMetrics")
 	setLayeredWindowAttributes = user32.NewProc("SetLayeredWindowAttributes")
 	showCursor                 = user32.NewProc("ShowCursor")
+	createBrush                = gdi32.NewProc("CreateBrushIndirect")
+	createCompatibleDC         = gdi32.NewProc("CreateCompatibleDC")
 	createSolidBrush           = gdi32.NewProc("CreateSolidBrush")
 	createPen                  = gdi32.NewProc("CreatePen")
 )
@@ -62,7 +64,7 @@ func worldToScreen(viewMatrix Matrix, position Vector3) (float32, float32) {
 	return x, y
 }
 
-func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr) ([][4][2]float32, []int32, []int32) {
+func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth uintptr, screenHeight uintptr) ([][4][2]float32, []int32, []int32) {
 	var localPlayerP uintptr
 	err := read(procHandle, clientDll+dwLocalPlayerPawn, &localPlayerP)
 	if err != nil {
@@ -167,7 +169,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr) ([][4][2]floa
 		}
 		screenPosHeadX, screenPosHeadY := worldToScreen(viewMatrix, entityHead)
 		_, screenPosFeetY := worldToScreen(viewMatrix, entityOrigin)
-		if screenPosHeadX <= -1 || screenPosHeadY <= -1 {
+		if screenPosHeadX <= -1 || screenPosHeadY <= -1 || screenPosHeadX >= float32(screenWidth) || screenPosFeetY >= float32(screenHeight) {
 			continue
 		}
 		boxHeight := screenPosFeetY - screenPosHeadY
@@ -183,20 +185,39 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr) ([][4][2]floa
 	return entRects, entityTeams, entityHealths
 }
 
-func drawRect(hdc win.HDC, gPen uintptr, rect [4][2]float32, hp int32) {
+func drawRect(hdc win.HDC, tPen uintptr, gPen uintptr, oPen uintptr, rect [4][2]float32, hp int32) {
+	win.SelectObject(hdc, win.HGDIOBJ(oPen))
+	win.MoveToEx(hdc, int(rect[0][0])-1, int(rect[0][1])-1, nil)
+	win.LineTo(hdc, int32(rect[1][0])+1, int32(rect[1][1])-1)
+	win.LineTo(hdc, int32(rect[2][0])+1, int32(rect[2][1])+1)
+	win.LineTo(hdc, int32(rect[3][0])-1, int32(rect[3][1])+1)
+	win.LineTo(hdc, int32(rect[0][0])-1, int32(rect[0][1])-1)
+	win.MoveToEx(hdc, int(rect[0][0])+1, int(rect[0][1])+1, nil)
+	win.LineTo(hdc, int32(rect[1][0])-1, int32(rect[1][1])+1)
+	win.LineTo(hdc, int32(rect[2][0])-1, int32(rect[2][1])-1)
+	win.LineTo(hdc, int32(rect[3][0])+1, int32(rect[3][1])-1)
+	win.LineTo(hdc, int32(rect[0][0])+1, int32(rect[0][1])+1)
+	win.SelectObject(hdc, win.HGDIOBJ(tPen))
 	win.MoveToEx(hdc, int(rect[0][0]), int(rect[0][1]), nil)
 	win.LineTo(hdc, int32(rect[1][0]), int32(rect[1][1]))
 	win.LineTo(hdc, int32(rect[2][0]), int32(rect[2][1]))
 	win.LineTo(hdc, int32(rect[3][0]), int32(rect[3][1]))
-	win.LineTo(hdc, int32(rect[0][0]), int32(rect[0][1])-1)
+	win.LineTo(hdc, int32(rect[0][0]), int32(rect[0][1]))
 	win.SelectObject(hdc, win.HGDIOBJ(gPen))
-	win.MoveToEx(hdc, int(rect[0][0])-4, int(rect[3][1])-int(float64(int(rect[3][1])-int(rect[0][1]))*float64(hp)/100.0), nil)
-	win.LineTo(hdc, int32(rect[3][0])-4, int32(rect[3][1]))
-
+	win.MoveToEx(hdc, int(rect[0][0])-4, int(rect[3][1])+1-int(float64(int(rect[3][1])+1-int(rect[0][1]))*float64(hp)/100.0), nil)
+	win.LineTo(hdc, int32(rect[3][0])-4, int32(rect[3][1])+1)
+	win.SelectObject(hdc, win.HGDIOBJ(oPen))
+	win.MoveToEx(hdc, int(rect[0][0])-5, int(rect[0][1])-1, nil)
+	win.LineTo(hdc, int32(rect[0][0])-5, int32(rect[3][1])+1)
+	win.LineTo(hdc, int32(rect[0][0])-3, int32(rect[3][1])+1)
+	win.LineTo(hdc, int32(rect[0][0])-3, int32(rect[0][1])-1)
+	win.LineTo(hdc, int32(rect[0][0])-5, int32(rect[0][1])-1)
 }
 
 func windowProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr) uintptr {
 	switch msg {
+	case win.WM_TIMER:
+		return 0
 	case win.WM_DESTROY:
 		win.PostQuitMessage(0)
 		return 0
@@ -232,7 +253,7 @@ func initWindow(screenWidth uintptr, screenHeight uintptr) win.HWND {
 		LpszClassName: className,
 		HIconSm:       win.LoadIcon(0, (*uint16)(unsafe.Pointer(uintptr(win.IDI_APPLICATION)))),
 	}
-	bgBrush, _, _ := createSolidBrush.Call(uintptr(0x0000FF00))
+	bgBrush, _, _ := createSolidBrush.Call(uintptr(0x000000))
 	wc.HbrBackground = win.HBRUSH(bgBrush)
 
 	if atom := win.RegisterClassEx(&wc); atom == 0 {
@@ -261,7 +282,7 @@ func initWindow(screenWidth uintptr, screenHeight uintptr) win.HWND {
 		return 0
 	}
 
-	result, _, _ := setLayeredWindowAttributes.Call(uintptr(hwnd), 0x0000FF00, 0, 0x00000001)
+	result, _, _ := setLayeredWindowAttributes.Call(uintptr(hwnd), 0x000000, 0, 0x00000001)
 	if result == 0 {
 		logAndSleep(fmt.Errorf("error setting layered window attributes: %v", win.GetLastError()))
 	}
@@ -308,41 +329,62 @@ func main() {
 	}
 	fmt.Println(hdc)
 
-	redPen, _, _ := createPen.Call(win.PS_SOLID, 2, 0x0000FF)
+	bgBrush, _, _ := createSolidBrush.Call(uintptr(0x000000))
+	if bgBrush == 0 {
+		fmt.Println("Error creating brush:", win.GetLastError())
+		return
+	}
+	defer win.DeleteObject(win.HGDIOBJ(bgBrush))
+	redPen, _, _ := createPen.Call(win.PS_SOLID, 1, 0x0000FF)
 	if redPen == 0 {
 		fmt.Println("Error creating pen:", win.GetLastError())
 		return
 	}
 	defer win.DeleteObject(win.HGDIOBJ(redPen))
-	greenPen, _, _ := createPen.Call(win.PS_SOLID, 2, 0x00F800)
+	greenPen, _, _ := createPen.Call(win.PS_SOLID, 1, 0x00F800)
 	if greenPen == 0 {
 		fmt.Println("Error creating pen:", win.GetLastError())
 		return
 	}
 	defer win.DeleteObject(win.HGDIOBJ(greenPen))
-	bluePen, _, _ := createPen.Call(win.PS_SOLID, 2, 0xFF0000)
+	bluePen, _, _ := createPen.Call(win.PS_SOLID, 1, 0xFF0000)
 	if bluePen == 0 {
 		fmt.Println("Error creating pen:", win.GetLastError())
 		return
 	}
 	defer win.DeleteObject(win.HGDIOBJ(bluePen))
+	outlinePen, _, _ := createPen.Call(win.PS_SOLID, 1, 0x000001)
+	if outlinePen == 0 {
+		fmt.Println("Error creating pen:", win.GetLastError())
+		return
+	}
+	defer win.DeleteObject(win.HGDIOBJ(outlinePen))
 
+	win.SetTimer(hwnd, 1, 1, 0)
 	var msg win.MSG
 	for win.GetMessage(&msg, 0, 0, 0) > 0 {
+		start := time.Now()
+		memhdc, _, _ := createCompatibleDC.Call(uintptr(hdc))
+		memBitmap := win.CreateCompatibleBitmap(hdc, int32(screenWidth), int32(screenHeight))
+		win.SelectObject(win.HDC(memhdc), win.HGDIOBJ(memBitmap))
+		win.SelectObject(win.HDC(memhdc), win.HGDIOBJ(bgBrush))
 		win.TranslateMessage(&msg)
 		win.DispatchMessage(&msg)
 
-		rects, teams, healths := getEntitiesInfo(procHandle, clientDll)
+		rects, teams, healths := getEntitiesInfo(procHandle, clientDll, screenWidth, screenHeight)
 		for i, rect := range rects {
 			if teams[i] == 2 {
-				win.SelectObject(hdc, win.HGDIOBJ(redPen))
+				drawRect(win.HDC(memhdc), redPen, greenPen, outlinePen, rect, healths[i])
 			} else {
-				win.SelectObject(hdc, win.HGDIOBJ(bluePen))
+				drawRect(win.HDC(memhdc), bluePen, greenPen, outlinePen, rect, healths[i])
 			}
-			drawRect(hdc, greenPen, rect, healths[i])
 		}
-		win.UpdateWindow(hwnd)
-		win.InvalidateRect(hwnd, nil, true)
-		time.Sleep(5 * time.Millisecond)
+		win.BitBlt(hdc, 0, 0, int32(screenWidth), int32(screenHeight), win.HDC(memhdc), 0, 0, win.SRCCOPY)
+
+		// Delete the memory bitmap and device context
+		win.DeleteObject(win.HGDIOBJ(memBitmap))
+		win.DeleteDC(win.HDC(memhdc))
+
+		fmt.Println(time.Since(start))
 	}
 }
