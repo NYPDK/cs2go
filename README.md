@@ -12,9 +12,11 @@ To build this project you will need to download Go: https://go.dev/doc/install
 Download the source and extract the .zip file to wherever you like.
 
 Open the folder location in your console
+
 ![](https://i.ibb.co/j6PRwt2/image.png)
 
 Make sure your environment GOOS is set to Windows and GOARCH is set to amd64. To change these variables you can run `set GOOS=windows` and `set GOARCH=amd64`
+
 ![](https://i.ibb.co/qRVgV5d/image.png)
 
 Build the project with `go build -ldflags "-s -w"` The ldflags are optional and remove debugger functionality and strip the binary resulting in smaller file size.
