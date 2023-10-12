@@ -91,6 +91,8 @@ func read(process windows.Handle, address uintptr, value interface{}) error {
 		*v = math.Float64frombits(binary.LittleEndian.Uint64(buffer))
 	case *uintptr:
 		*v = uintptr(binary.LittleEndian.Uint64(buffer))
+	case *string:
+		*v = string(buffer[:bytesRead])
 	case *Vector3:
 		v.X = math.Float32frombits(binary.LittleEndian.Uint32(buffer[0:4]))
 		v.Y = math.Float32frombits(binary.LittleEndian.Uint32(buffer[4:8]))

@@ -2,9 +2,12 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
+	"unicode"
 	"unsafe"
 
 	"github.com/lxn/win"
@@ -25,7 +28,8 @@ var (
 	getSystemMetrics           = user32.NewProc("GetSystemMetrics")
 	setLayeredWindowAttributes = user32.NewProc("SetLayeredWindowAttributes")
 	showCursor                 = user32.NewProc("ShowCursor")
-	createBrush                = gdi32.NewProc("CreateBrushIndirect")
+	setTextAlign               = gdi32.NewProc("SetTextAlign")
+	createFont                 = gdi32.NewProc("CreateFontW")
 	createCompatibleDC         = gdi32.NewProc("CreateCompatibleDC")
 	createSolidBrush           = gdi32.NewProc("CreateSolidBrush")
 	createPen                  = gdi32.NewProc("CreatePen")
@@ -36,8 +40,8 @@ func init() {
 	runtime.LockOSThread()
 }
 
-func logAndSleep(err error) {
-	fmt.Println(err)
+func logAndSleep(message string, err error) {
+	log.Printf("%s: %v\n", message, err)
 	time.Sleep(5 * time.Second)
 }
 
@@ -64,35 +68,40 @@ func worldToScreen(viewMatrix Matrix, position Vector3) (float32, float32) {
 	return x, y
 }
 
-func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth uintptr, screenHeight uintptr) ([][4][2]float32, []int32, []int32) {
+func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth uintptr, screenHeight uintptr) ([][4][2]float32, []int32, []int32, []string) {
 	var localPlayerP uintptr
 	err := read(procHandle, clientDll+dwLocalPlayerPawn, &localPlayerP)
 	if err != nil {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	var entityList uintptr
 	err = read(procHandle, clientDll+dwEntityList, &entityList)
 	if err != nil {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	var listEntry uintptr
 	var entityController uintptr
 	var entityControllerPawn uintptr
 	var entityPawn uintptr
+	var entityNameAddress uintptr
 	var entityTeam int32
 	var entityHealth int32
+	var entityName string
+	var sanitizedNameStr string
 	var entityOrigin Vector3
 	var viewMatrix Matrix
 
 	var entRects [][4][2]float32
 	var entityTeams []int32
 	var entityHealths []int32
+	var entityNames []string
 	for i := 0; i < 64; i++ {
+		var sanitizedName strings.Builder
 		// listEntry
 		err := read(procHandle, entityList+uintptr((8*(i&0x7FFF)>>9)+16), &listEntry)
 		if err != nil {
-			logAndSleep(err)
-			return nil, nil, nil
+			logAndSleep("Error reading listEntry", err)
+			return nil, nil, nil, nil
 		}
 		if listEntry == 0 {
 			continue
@@ -100,8 +109,8 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		// entityController
 		err = read(procHandle, listEntry+uintptr(120)*uintptr(i&0x1FF), &entityController)
 		if err != nil {
-			logAndSleep(err)
-			return nil, nil, nil
+			logAndSleep("Error reading entityController", err)
+			return nil, nil, nil, nil
 		}
 		if entityController == 0 {
 			continue
@@ -109,8 +118,8 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		// entityControllerPawn
 		err = read(procHandle, entityController+m_hPlayerPawn, &entityControllerPawn)
 		if err != nil {
-			logAndSleep(err)
-			return nil, nil, nil
+			logAndSleep("Error reading entityControllerPawn", err)
+			return nil, nil, nil, nil
 		}
 		if entityControllerPawn == 0 {
 			continue
@@ -118,8 +127,8 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		// listEntry
 		err = read(procHandle, entityList+uintptr(0x8*((entityControllerPawn&0x7FFF)>>9)+16), &listEntry)
 		if err != nil {
-			logAndSleep(err)
-			return nil, nil, nil
+			logAndSleep("Error reading listEntry", err)
+			return nil, nil, nil, nil
 		}
 		if listEntry == 0 {
 			continue
@@ -127,8 +136,8 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		// entityPawn
 		err = read(procHandle, listEntry+uintptr(120)*uintptr(entityControllerPawn&0x1FF), &entityPawn)
 		if err != nil {
-			logAndSleep(err)
-			return nil, nil, nil
+			logAndSleep("Error reading entityPawn", err)
+			return nil, nil, nil, nil
 		}
 		if entityPawn == 0 {
 			continue
@@ -139,8 +148,8 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		// entityTeam
 		err = read(procHandle, entityPawn+m_iTeamNum, &entityTeam)
 		if err != nil {
-			logAndSleep(err)
-			return nil, nil, nil
+			logAndSleep("Error reading entityTeam", err)
+			return nil, nil, nil, nil
 		}
 		if entityTeam == 0 {
 			continue
@@ -148,24 +157,45 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		// entityHealth
 		err = read(procHandle, entityPawn+m_iHealth, &entityHealth)
 		if err != nil {
-			logAndSleep(err)
-			return nil, nil, nil
+			logAndSleep("Error reading entityHealth", err)
+			return nil, nil, nil, nil
 		}
 		if entityHealth <= 0 {
 			continue
 		}
+		// entityNameAddress
+		err = read(procHandle, entityController+m_sSanitizedPlayerName, &entityNameAddress)
+		if err != nil {
+			logAndSleep("Error reading entityNameAddress", err)
+			return nil, nil, nil, nil
+		}
+		// entityName
+		err = read(procHandle, entityNameAddress, &entityName)
+		if err != nil {
+			logAndSleep("Error reading entityName", err)
+			return nil, nil, nil, nil
+		}
+		if entityName == "" {
+			continue
+		}
+		for _, c := range entityName {
+			if unicode.IsLetter(c) || unicode.IsDigit(c) || unicode.IsPunct(c) || unicode.IsSpace(c) {
+				sanitizedName.WriteRune(c)
+			}
+		}
+		sanitizedNameStr = sanitizedName.String()
 		// entityOrigin
 		err = read(procHandle, entityPawn+m_vOldOrigin, &entityOrigin)
 		if err != nil {
-			logAndSleep(err)
-			return nil, nil, nil
+			logAndSleep("Error reading entityOrigin", err)
+			return nil, nil, nil, nil
 		}
 		entityHead := Vector3{X: entityOrigin.X, Y: entityOrigin.Y, Z: entityOrigin.Z + 70.0}
 		// viewMatrix
 		err = read(procHandle, clientDll+dwViewMatrix, &viewMatrix)
 		if err != nil {
-			logAndSleep(err)
-			return nil, nil, nil
+			logAndSleep("Error reading viewMatrix", err)
+			return nil, nil, nil, nil
 		}
 		screenPosHeadX, screenPosHeadY := worldToScreen(viewMatrix, entityHead)
 		_, screenPosFeetY := worldToScreen(viewMatrix, entityOrigin)
@@ -181,11 +211,21 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 			{screenPosHeadX - boxHeight/4, screenPosFeetY}})
 		entityTeams = append(entityTeams, entityTeam)
 		entityHealths = append(entityHealths, entityHealth)
+		entityNames = append(entityNames, sanitizedNameStr)
 	}
-	return entRects, entityTeams, entityHealths
+	return entRects, entityTeams, entityHealths, entityNames
 }
 
-func drawRect(hdc win.HDC, tPen uintptr, gPen uintptr, oPen uintptr, rect [4][2]float32, hp int32) {
+func renderEntityInfo(hdc win.HDC, tPen uintptr, gPen uintptr, oPen uintptr, rect [4][2]float32, hp int32, name string) {
+	// Box
+	win.SelectObject(hdc, win.HGDIOBJ(tPen))
+	win.MoveToEx(hdc, int(rect[0][0]), int(rect[0][1]), nil)
+	win.LineTo(hdc, int32(rect[1][0]), int32(rect[1][1]))
+	win.LineTo(hdc, int32(rect[2][0]), int32(rect[2][1]))
+	win.LineTo(hdc, int32(rect[3][0]), int32(rect[3][1]))
+	win.LineTo(hdc, int32(rect[0][0]), int32(rect[0][1]))
+
+	// Box outline
 	win.SelectObject(hdc, win.HGDIOBJ(oPen))
 	win.MoveToEx(hdc, int(rect[0][0])-1, int(rect[0][1])-1, nil)
 	win.LineTo(hdc, int32(rect[1][0])+1, int32(rect[1][1])-1)
@@ -197,21 +237,25 @@ func drawRect(hdc win.HDC, tPen uintptr, gPen uintptr, oPen uintptr, rect [4][2]
 	win.LineTo(hdc, int32(rect[2][0])-1, int32(rect[2][1])-1)
 	win.LineTo(hdc, int32(rect[3][0])+1, int32(rect[3][1])-1)
 	win.LineTo(hdc, int32(rect[0][0])+1, int32(rect[0][1])+1)
-	win.SelectObject(hdc, win.HGDIOBJ(tPen))
-	win.MoveToEx(hdc, int(rect[0][0]), int(rect[0][1]), nil)
-	win.LineTo(hdc, int32(rect[1][0]), int32(rect[1][1]))
-	win.LineTo(hdc, int32(rect[2][0]), int32(rect[2][1]))
-	win.LineTo(hdc, int32(rect[3][0]), int32(rect[3][1]))
-	win.LineTo(hdc, int32(rect[0][0]), int32(rect[0][1]))
+
+	// Health bar
 	win.SelectObject(hdc, win.HGDIOBJ(gPen))
 	win.MoveToEx(hdc, int(rect[0][0])-4, int(rect[3][1])+1-int(float64(int(rect[3][1])+1-int(rect[0][1]))*float64(hp)/100.0), nil)
 	win.LineTo(hdc, int32(rect[3][0])-4, int32(rect[3][1])+1)
+
+	// Health bar outline
 	win.SelectObject(hdc, win.HGDIOBJ(oPen))
 	win.MoveToEx(hdc, int(rect[0][0])-5, int(rect[0][1])-1, nil)
 	win.LineTo(hdc, int32(rect[0][0])-5, int32(rect[3][1])+1)
 	win.LineTo(hdc, int32(rect[0][0])-3, int32(rect[3][1])+1)
 	win.LineTo(hdc, int32(rect[0][0])-3, int32(rect[0][1])-1)
 	win.LineTo(hdc, int32(rect[0][0])-5, int32(rect[0][1])-1)
+
+	// Name
+	text, _ := windows.UTF16PtrFromString(name)
+	win.SetTextColor(hdc, win.COLORREF(0xFFFFFF))
+	setTextAlign.Call(uintptr(hdc), 0x00000006) // Set text alignment to center
+	win.TextOut(hdc, int32(rect[0][0])+int32((int32(rect[1][0])-int32(rect[0][0]))/2), int32(rect[0][1])-14, text, int32(len(name)))
 }
 
 func windowProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr) uintptr {
@@ -230,12 +274,12 @@ func initWindow(screenWidth uintptr, screenHeight uintptr) win.HWND {
 
 	className, err := windows.UTF16PtrFromString("cs2goWindow")
 	if err != nil {
-		logAndSleep(err)
+		logAndSleep("Error creating window class name", err)
 		return 0
 	}
 	windowTitle, err := windows.UTF16PtrFromString("cs2go")
 	if err != nil {
-		logAndSleep(err)
+		logAndSleep("Error creating window title", err)
 		return 0
 	}
 
@@ -253,11 +297,9 @@ func initWindow(screenWidth uintptr, screenHeight uintptr) win.HWND {
 		LpszClassName: className,
 		HIconSm:       win.LoadIcon(0, (*uint16)(unsafe.Pointer(uintptr(win.IDI_APPLICATION)))),
 	}
-	bgBrush, _, _ := createSolidBrush.Call(uintptr(0x000000))
-	wc.HbrBackground = win.HBRUSH(bgBrush)
 
 	if atom := win.RegisterClassEx(&wc); atom == 0 {
-		fmt.Println("Error registering window class:", win.GetLastError())
+		logAndSleep("Error registering window class", fmt.Errorf("%v", win.GetLastError()))
 		return 0
 	}
 
@@ -278,13 +320,13 @@ func initWindow(screenWidth uintptr, screenHeight uintptr) win.HWND {
 		nil,
 	)
 	if hwnd == 0 {
-		fmt.Println("Error creating window:", win.GetLastError())
+		logAndSleep("Error creating window", fmt.Errorf("%v", win.GetLastError()))
 		return 0
 	}
 
 	result, _, _ := setLayeredWindowAttributes.Call(uintptr(hwnd), 0x000000, 0, 0x00000001)
 	if result == 0 {
-		logAndSleep(fmt.Errorf("error setting layered window attributes: %v", win.GetLastError()))
+		logAndSleep("Error setting layered window attributes", fmt.Errorf("%v", win.GetLastError()))
 	}
 
 	showCursor.Call(0)
@@ -300,83 +342,87 @@ func main() {
 
 	hwnd := initWindow(screenWidth, screenHeight)
 	if hwnd == 0 {
-		logAndSleep(fmt.Errorf("error initializing window"))
+		logAndSleep("Error creating window", fmt.Errorf("%v", win.GetLastError()))
 		return
 	}
 
 	pid, err := findProcessId("cs2.exe")
 	if err != nil {
-		logAndSleep(err)
+		logAndSleep("Error finding process ID", err)
 		return
 	}
 
 	clientDll, err := getModuleBaseAddress(pid, "client.dll")
 	if err != nil {
-		logAndSleep(err)
+		logAndSleep("Error getting client.dll base address", err)
 		return
 	}
 
 	procHandle, err := getProcessHandle(pid)
 	if err != nil {
-		logAndSleep(err)
+		logAndSleep("Error getting process handle", err)
 		return
 	}
 
 	hdc := win.GetDC(hwnd)
 	if hdc == 0 {
-		logAndSleep(fmt.Errorf("error getting device context: %v", win.GetLastError()))
+		logAndSleep("Error getting device context", fmt.Errorf("%v", win.GetLastError()))
 		return
 	}
-	fmt.Println(hdc)
 
 	bgBrush, _, _ := createSolidBrush.Call(uintptr(0x000000))
 	if bgBrush == 0 {
-		fmt.Println("Error creating brush:", win.GetLastError())
+		logAndSleep("Error creating brush", fmt.Errorf("%v", win.GetLastError()))
 		return
 	}
 	defer win.DeleteObject(win.HGDIOBJ(bgBrush))
-	redPen, _, _ := createPen.Call(win.PS_SOLID, 1, 0x0000FF)
+	redPen, _, _ := createPen.Call(win.PS_SOLID, 1, 0x7a78ff)
 	if redPen == 0 {
-		fmt.Println("Error creating pen:", win.GetLastError())
+		logAndSleep("Error creating pen", fmt.Errorf("%v", win.GetLastError()))
 		return
 	}
 	defer win.DeleteObject(win.HGDIOBJ(redPen))
-	greenPen, _, _ := createPen.Call(win.PS_SOLID, 1, 0x00F800)
+	greenPen, _, _ := createPen.Call(win.PS_SOLID, 1, 0x7dff78)
 	if greenPen == 0 {
-		fmt.Println("Error creating pen:", win.GetLastError())
+		logAndSleep("Error creating pen", fmt.Errorf("%v", win.GetLastError()))
 		return
 	}
 	defer win.DeleteObject(win.HGDIOBJ(greenPen))
-	bluePen, _, _ := createPen.Call(win.PS_SOLID, 1, 0xFF0000)
+	bluePen, _, _ := createPen.Call(win.PS_SOLID, 1, 0xff8e78)
 	if bluePen == 0 {
-		fmt.Println("Error creating pen:", win.GetLastError())
+		logAndSleep("Error creating pen", fmt.Errorf("%v", win.GetLastError()))
 		return
 	}
 	defer win.DeleteObject(win.HGDIOBJ(bluePen))
 	outlinePen, _, _ := createPen.Call(win.PS_SOLID, 1, 0x000001)
 	if outlinePen == 0 {
-		fmt.Println("Error creating pen:", win.GetLastError())
+		logAndSleep("Error creating pen", fmt.Errorf("%v", win.GetLastError()))
 		return
 	}
 	defer win.DeleteObject(win.HGDIOBJ(outlinePen))
 
+	font, _, _ := createFont.Call(12, 0, 0, 0, win.FW_DONTCARE, 0, 0, 0, win.DEFAULT_CHARSET, win.OUT_DEFAULT_PRECIS, win.CLIP_DEFAULT_PRECIS, win.DEFAULT_QUALITY, win.DEFAULT_PITCH|win.FF_DONTCARE, 0)
+
 	win.SetTimer(hwnd, 1, 1, 0)
 	var msg win.MSG
+	fmt.Println("Starting main loop")
 	for win.GetMessage(&msg, 0, 0, 0) > 0 {
-		start := time.Now()
+		win.TranslateMessage(&msg)
+		win.DispatchMessage(&msg)
+
 		memhdc, _, _ := createCompatibleDC.Call(uintptr(hdc))
 		memBitmap := win.CreateCompatibleBitmap(hdc, int32(screenWidth), int32(screenHeight))
 		win.SelectObject(win.HDC(memhdc), win.HGDIOBJ(memBitmap))
 		win.SelectObject(win.HDC(memhdc), win.HGDIOBJ(bgBrush))
-		win.TranslateMessage(&msg)
-		win.DispatchMessage(&msg)
+		win.SetBkMode(win.HDC(memhdc), win.TRANSPARENT)
+		win.SelectObject(win.HDC(memhdc), win.HGDIOBJ(font))
 
-		rects, teams, healths := getEntitiesInfo(procHandle, clientDll, screenWidth, screenHeight)
+		rects, teams, healths, names := getEntitiesInfo(procHandle, clientDll, screenWidth, screenHeight)
 		for i, rect := range rects {
 			if teams[i] == 2 {
-				drawRect(win.HDC(memhdc), redPen, greenPen, outlinePen, rect, healths[i])
+				renderEntityInfo(win.HDC(memhdc), redPen, greenPen, outlinePen, rect, healths[i], names[i])
 			} else {
-				drawRect(win.HDC(memhdc), bluePen, greenPen, outlinePen, rect, healths[i])
+				renderEntityInfo(win.HDC(memhdc), bluePen, greenPen, outlinePen, rect, healths[i], names[i])
 			}
 		}
 		win.BitBlt(hdc, 0, 0, int32(screenWidth), int32(screenHeight), win.HDC(memhdc), 0, 0, win.SRCCOPY)
@@ -384,7 +430,5 @@ func main() {
 		// Delete the memory bitmap and device context
 		win.DeleteObject(win.HGDIOBJ(memBitmap))
 		win.DeleteDC(win.HDC(memhdc))
-
-		fmt.Println(time.Since(start))
 	}
 }
