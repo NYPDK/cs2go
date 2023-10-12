@@ -22,10 +22,11 @@ Once you have installed Go, follow these steps:
    The `ldflags` are optional and remove debugger functionality and strip the binary resulting in smaller file size.
 5. Run the program while in a match to use.
 
+If the compiler complains about not having `"github.com/lxn/win"` and/or `"golang.org/x/sys/windows"` run `go get github.com/lxn/win` and `go get golang.org/x/sys/windows` | Finalize with `go mod tidy`
 ## Example
 
 Check out this video for an example of cs2go in action:
 
-[![Example video](https://cdn-cf-east.streamable.com/image/q9pi9f.jpg?Expires=1697324454744&Key-Pair-Id=APKAIEYUVEN4EVB2OKEQ&Signature=iEE6IgMhrCNbLezEkzF6kmXbxynfLXLU2zzXLMykIM6w58lnwrbi0eF1YpsD3CAQRxVpOZsFDz-N8zWWG1JiDCOX9yeK9XbhBwUKthFafsUIzJMBDDJZ0TaC-Q36QcQ015snd8nRMH~DfS7L~p0xCdr81g~lZKDnSmU-B9qeFeW8~NdhgI0CC8JrvuzwHEp3xr44gcBNqXJzfXeiWn2MZc68UqF7sV~Vqd-8wVZySLvGnBvK2pNTa~eV02Iw-4Wrs1oWo3PBCTjyodioTBIaVT8GShyvhs~BV5PPs6PT7x1he-nUYTgtHkWOxaYjjNucZJIiE2fLtaJlYs9htTRWUA__)](https://streamable.com/q9pi9f)
+[![Example video](https://cdn-cf-east.streamable.com/image/pwd7bt.jpg?Expires=1697333786148&Key-Pair-Id=APKAIEYUVEN4EVB2OKEQ&Signature=aX~z1QiaZUgVA46Pmw-1H22cc~BM4dEtx6U~jJj0HB1bP-PzIQARLF~RtL7vhk8rXsF819C1Q2TH5IIO-g5YDhyA~gHvXE6CzONAddTsPKVXoaUhfDzbHF3JqSyTxM2AWPcA7~jjEiMnJOgg8ijSZfA4KBYEl6PbTMXj4gzawZjtly-peNil2E0akMgTZq9gJ7ev~TyQczBrddQz1pvwH7FZZY4e~HsoFQMpzpqqFYg~g7VQ~6stJy6M4mBBHe~J9k2mslpK9ZghTS4oWFy3ei372l~HgbrNTmvXUNuND~uUGKCEcdoU45FOrgJF~tDbjVwTt6nD23hkt0jpAiWYXg__)](https://streamable.com/pwd7bt)
 
 Thank you for using cs2go!
