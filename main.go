@@ -48,6 +48,8 @@ var (
 	createPen                  = gdi32.NewProc("CreatePen")
 )
 
+var teamCheck bool
+
 func init() {
 	// Ensure main() runs on the main thread.
 	runtime.LockOSThread()
@@ -111,6 +113,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 	}
 	var (
 		localPlayerP         uintptr
+		localTeam            int32
 		listEntry            uintptr
 		entityController     uintptr
 		entityControllerPawn uintptr
@@ -129,14 +132,14 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		entityHealths []int32
 		entityNames   []string
 	)
-	// localPlayerP
-	err = read(procHandle, clientDll+offsets.DwLocalPlayerPawn, &localPlayerP)
-	if err != nil {
-		fmt.Println("Error reading localPlayerP", err)
-		return nil, nil, nil, nil
-	}
 	for i := 0; i < 32; i++ {
 		var sanitizedName strings.Builder
+		// localPlayerP
+		err = read(procHandle, clientDll+offsets.DwLocalPlayerPawn, &localPlayerP)
+		if err != nil {
+			fmt.Println("Error reading localPlayerP", err)
+			return nil, nil, nil, nil
+		}
 		// listEntry
 		err = read(procHandle, entityList+uintptr((8*(i&0x7FFF)>>9)+16), &listEntry)
 		if err != nil {
@@ -212,6 +215,17 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		}
 		if entityTeam == 0 {
 			continue
+		}
+		if teamCheck {
+			// localTeam
+			err = read(procHandle, localPlayerP+offsets.M_iTeamNum, &localTeam)
+			if err != nil {
+				fmt.Println("Error reading localTeam", err)
+				return nil, nil, nil, nil
+			}
+			if localTeam == entityTeam {
+				continue
+			}
 		}
 		// entityHealth
 		err = read(procHandle, entityPawn+offsets.M_iHealth, &entityHealth)
@@ -377,6 +391,19 @@ func initWindow(screenWidth uintptr, screenHeight uintptr) win.HWND {
 }
 
 func main() {
+	// take user cli input with scanner to toggle team check
+	fmt.Println("Toggle team check? (Y/n)")
+	var input string
+	fmt.Scanln(&input)
+	if input == "y" || input == "Y" {
+		teamCheck = true
+	} else if input == "n" || input == "N" {
+		teamCheck = false
+	} else {
+		fmt.Println("Invalid input, defaulting to true")
+		teamCheck = true
+	}
+
 	screenWidth, _, _ := getSystemMetrics.Call(0)
 	screenHeight, _, _ := getSystemMetrics.Call(1)
 
@@ -450,6 +477,7 @@ func main() {
 
 	win.SetTimer(hwnd, 1, 15, 0)
 	var msg win.MSG
+
 	fmt.Println("Starting main loop")
 	for win.GetMessage(&msg, 0, 0, 0) > 0 {
 		win.TranslateMessage(&msg)
