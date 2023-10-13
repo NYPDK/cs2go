@@ -188,25 +188,6 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		if entityPawn == localPlayerP {
 			continue
 		}
-		// entityOrigin
-		err = read(procHandle, entityPawn+offsets.M_vOldOrigin, &entityOrigin)
-		if err != nil {
-			fmt.Println("Error reading entityOrigin", err)
-			return nil, nil, nil, nil
-		}
-		entityHead := Vector3{X: entityOrigin.X, Y: entityOrigin.Y, Z: entityOrigin.Z + 70.0}
-		// viewMatrix
-		err = read(procHandle, clientDll+offsets.DwViewMatrix, &viewMatrix)
-		if err != nil {
-			fmt.Println("Error reading viewMatrix", err)
-			return nil, nil, nil, nil
-		}
-		screenPosHeadX, screenPosHeadY := worldToScreen(viewMatrix, entityHead)
-		_, screenPosFeetY := worldToScreen(viewMatrix, entityOrigin)
-		if screenPosHeadX <= -1 || screenPosFeetY <= -1 || screenPosHeadX >= float32(screenWidth) || screenPosHeadY >= float32(screenHeight) {
-			continue
-		}
-		boxHeight := screenPosFeetY - screenPosHeadY
 		// entityTeam
 		err = read(procHandle, entityPawn+offsets.M_iTeamNum, &entityTeam)
 		if err != nil {
@@ -257,6 +238,25 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 			}
 		}
 		sanitizedNameStr = sanitizedName.String()
+		// entityOrigin
+		err = read(procHandle, entityPawn+offsets.M_vOldOrigin, &entityOrigin)
+		if err != nil {
+			fmt.Println("Error reading entityOrigin", err)
+			return nil, nil, nil, nil
+		}
+		entityHead := Vector3{X: entityOrigin.X, Y: entityOrigin.Y, Z: entityOrigin.Z + 70.0}
+		// viewMatrix
+		err = read(procHandle, clientDll+offsets.DwViewMatrix, &viewMatrix)
+		if err != nil {
+			fmt.Println("Error reading viewMatrix", err)
+			return nil, nil, nil, nil
+		}
+		screenPosHeadX, screenPosHeadY := worldToScreen(viewMatrix, entityHead)
+		_, screenPosFeetY := worldToScreen(viewMatrix, entityOrigin)
+		if screenPosHeadX <= -1 || screenPosFeetY <= -1 || screenPosHeadX >= float32(screenWidth) || screenPosHeadY >= float32(screenHeight) {
+			continue
+		}
+		boxHeight := screenPosFeetY - screenPosHeadY
 
 		entRects = append(entRects, [4][2]float32{
 			{screenPosHeadX - boxHeight/4, screenPosHeadY},
