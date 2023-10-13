@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"runtime"
 	"strings"
 	"syscall"
@@ -20,6 +22,17 @@ type Vector3 struct {
 	X float32
 	Y float32
 	Z float32
+}
+
+type Offset struct {
+	DwViewMatrix           uintptr `json:"dwViewMatrix"`
+	DwLocalPlayerPawn      uintptr `json:"dwLocalPlayerPawn"`
+	DwEntityList           uintptr `json:"dwEntityList"`
+	M_hPlayerPawn          uintptr `json:"m_hPlayerPawn"`
+	M_iHealth              uintptr `json:"m_iHealth"`
+	M_iTeamNum             uintptr `json:"m_iTeamNum"`
+	M_vOldOrigin           uintptr `json:"m_vOldOrigin"`
+	M_sSanitizedPlayerName uintptr `json:"m_sSanitizedPlayerName"`
 }
 
 var (
@@ -68,15 +81,38 @@ func worldToScreen(viewMatrix Matrix, position Vector3) (float32, float32) {
 	return x, y
 }
 
-func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth uintptr, screenHeight uintptr) ([][4][2]float32, []int32, []int32, []string) {
-	var localPlayerP uintptr
-	err := read(procHandle, clientDll+dwLocalPlayerPawn, &localPlayerP)
+func getOffsets() Offset {
+	var offsets Offset
+
+	// Open the file
+	offsetsJson, err := os.Open("offsets.json")
 	if err != nil {
+		logAndSleep("Error opening offsets.json", err)
+		return offsets
+	}
+	defer offsetsJson.Close()
+
+	// Decode the JSON
+	err = json.NewDecoder(offsetsJson).Decode(&offsets)
+	if err != nil {
+		logAndSleep("Error decoding JSON:", err)
+		return offsets
+	}
+	fmt.Println("Offset values:", offsets)
+	return offsets
+}
+
+func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth uintptr, screenHeight uintptr, offsets Offset) ([][4][2]float32, []int32, []int32, []string) {
+	var localPlayerP uintptr
+	err := read(procHandle, clientDll+offsets.DwLocalPlayerPawn, &localPlayerP)
+	if err != nil {
+		logAndSleep("Error reading localPlayerP", err)
 		return nil, nil, nil, nil
 	}
 	var entityList uintptr
-	err = read(procHandle, clientDll+dwEntityList, &entityList)
+	err = read(procHandle, clientDll+offsets.DwEntityList, &entityList)
 	if err != nil {
+		logAndSleep("Error reading initial entityList", err)
 		return nil, nil, nil, nil
 	}
 	var listEntry uintptr
@@ -116,7 +152,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 			continue
 		}
 		// entityControllerPawn
-		err = read(procHandle, entityController+m_hPlayerPawn, &entityControllerPawn)
+		err = read(procHandle, entityController+offsets.M_hPlayerPawn, &entityControllerPawn)
 		if err != nil {
 			logAndSleep("Error reading entityControllerPawn", err)
 			return nil, nil, nil, nil
@@ -146,7 +182,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 			continue
 		}
 		// entityTeam
-		err = read(procHandle, entityPawn+m_iTeamNum, &entityTeam)
+		err = read(procHandle, entityPawn+offsets.M_iTeamNum, &entityTeam)
 		if err != nil {
 			logAndSleep("Error reading entityTeam", err)
 			return nil, nil, nil, nil
@@ -155,7 +191,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 			continue
 		}
 		// entityHealth
-		err = read(procHandle, entityPawn+m_iHealth, &entityHealth)
+		err = read(procHandle, entityPawn+offsets.M_iHealth, &entityHealth)
 		if err != nil {
 			logAndSleep("Error reading entityHealth", err)
 			return nil, nil, nil, nil
@@ -164,7 +200,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 			continue
 		}
 		// entityNameAddress
-		err = read(procHandle, entityController+m_sSanitizedPlayerName, &entityNameAddress)
+		err = read(procHandle, entityController+offsets.M_sSanitizedPlayerName, &entityNameAddress)
 		if err != nil {
 			logAndSleep("Error reading entityNameAddress", err)
 			return nil, nil, nil, nil
@@ -185,14 +221,14 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		}
 		sanitizedNameStr = sanitizedName.String()
 		// entityOrigin
-		err = read(procHandle, entityPawn+m_vOldOrigin, &entityOrigin)
+		err = read(procHandle, entityPawn+offsets.M_vOldOrigin, &entityOrigin)
 		if err != nil {
 			logAndSleep("Error reading entityOrigin", err)
 			return nil, nil, nil, nil
 		}
 		entityHead := Vector3{X: entityOrigin.X, Y: entityOrigin.Y, Z: entityOrigin.Z + 70.0}
 		// viewMatrix
-		err = read(procHandle, clientDll+dwViewMatrix, &viewMatrix)
+		err = read(procHandle, clientDll+offsets.DwViewMatrix, &viewMatrix)
 		if err != nil {
 			logAndSleep("Error reading viewMatrix", err)
 			return nil, nil, nil, nil
@@ -403,6 +439,8 @@ func main() {
 
 	font, _, _ := createFont.Call(12, 0, 0, 0, win.FW_DONTCARE, 0, 0, 0, win.DEFAULT_CHARSET, win.OUT_DEFAULT_PRECIS, win.CLIP_DEFAULT_PRECIS, win.DEFAULT_QUALITY, win.DEFAULT_PITCH|win.FF_DONTCARE, 0)
 
+	offsets := getOffsets()
+
 	win.SetTimer(hwnd, 1, 1, 0)
 	var msg win.MSG
 	fmt.Println("Starting main loop")
@@ -417,7 +455,7 @@ func main() {
 		win.SetBkMode(win.HDC(memhdc), win.TRANSPARENT)
 		win.SelectObject(win.HDC(memhdc), win.HGDIOBJ(font))
 
-		rects, teams, healths, names := getEntitiesInfo(procHandle, clientDll, screenWidth, screenHeight)
+		rects, teams, healths, names := getEntitiesInfo(procHandle, clientDll, screenWidth, screenHeight, offsets)
 		for i, rect := range rects {
 			if teams[i] == 2 {
 				renderEntityInfo(win.HDC(memhdc), redPen, greenPen, outlinePen, rect, healths[i], names[i])

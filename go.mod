@@ -1,6 +1,6 @@
 module cs2go
 
-go 1.21.1
+go 1.21.3
 
 require golang.org/x/sys v0.13.0
 
