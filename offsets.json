@@ -6,5 +6,8 @@
     "m_iHealth": 812,
     "m_iTeamNum": 959,
     "m_vOldOrigin": 4628,
-    "m_sSanitizedPlayerName": 1824 
+    "m_pGameSceneNode": 784,
+    "m_modelState": 352,
+    "m_boneArray": 128,
+    "m_sSanitizedPlayerName": 1824
 }

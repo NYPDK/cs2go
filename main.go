@@ -32,6 +32,9 @@ type Offset struct {
 	M_iHealth              uintptr `json:"m_iHealth"`
 	M_iTeamNum             uintptr `json:"m_iTeamNum"`
 	M_vOldOrigin           uintptr `json:"m_vOldOrigin"`
+	M_pGameSceneNode       uintptr `json:"m_pGameSceneNode"`
+	M_modelState           uintptr `json:"m_modelState"`
+	M_boneArray            uintptr `json:"m_boneArray"`
 	M_sSanitizedPlayerName uintptr `json:"m_sSanitizedPlayerName"`
 }
 
@@ -104,21 +107,23 @@ func getOffsets() Offset {
 	return offsets
 }
 
-func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth uintptr, screenHeight uintptr, offsets Offset) ([][4][2]float32, []int32, []int32, []string) {
+func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth uintptr, screenHeight uintptr, offsets Offset) ([][4][2]float32, []int32, []int32, []string, [][3]float32) {
 	var entityList uintptr
 	err := read(procHandle, clientDll+offsets.DwEntityList, &entityList)
 	if err != nil {
 		fmt.Println("Error reading initial entityList", err)
-		return nil, nil, nil, nil
+		return nil, nil, nil, nil, nil
 	}
 	var (
 		localPlayerP         uintptr
 		localTeam            int32
 		listEntry            uintptr
+		gameScene            uintptr
 		entityController     uintptr
 		entityControllerPawn uintptr
 		entityPawn           uintptr
 		entityNameAddress    uintptr
+		entityBoneArray      uintptr
 		entityTeam           int32
 		entityHealth         int32
 		entityName           string
@@ -127,24 +132,30 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		viewMatrix           Matrix
 	)
 	var (
+		entityHead       Vector3
+		entityHeadTop    Vector3
+		entityHeadBottom Vector3
+	)
+	var (
 		entRects      [][4][2]float32
+		entityHeadPos [][3]float32
 		entityTeams   []int32
 		entityHealths []int32
 		entityNames   []string
 	)
-	for i := 0; i < 32; i++ {
+	// localPlayerP
+	err = read(procHandle, clientDll+offsets.DwLocalPlayerPawn, &localPlayerP)
+	if err != nil {
+		fmt.Println("Error reading localPlayerP", err)
+		return nil, nil, nil, nil, nil
+	}
+	for i := 0; i < 64; i++ {
 		var sanitizedName strings.Builder
-		// localPlayerP
-		err = read(procHandle, clientDll+offsets.DwLocalPlayerPawn, &localPlayerP)
-		if err != nil {
-			fmt.Println("Error reading localPlayerP", err)
-			return nil, nil, nil, nil
-		}
 		// listEntry
 		err = read(procHandle, entityList+uintptr((8*(i&0x7FFF)>>9)+16), &listEntry)
 		if err != nil {
 			fmt.Println("Error reading listEntry", err)
-			return nil, nil, nil, nil
+			return nil, nil, nil, nil, nil
 		}
 		if listEntry == 0 {
 			continue
@@ -153,7 +164,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, listEntry+uintptr(120)*uintptr(i&0x1FF), &entityController)
 		if err != nil {
 			fmt.Println("Error reading entityController", err)
-			return nil, nil, nil, nil
+			return nil, nil, nil, nil, nil
 		}
 		if entityController == 0 {
 			continue
@@ -162,7 +173,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, entityController+offsets.M_hPlayerPawn, &entityControllerPawn)
 		if err != nil {
 			fmt.Println("Error reading entityControllerPawn", err)
-			return nil, nil, nil, nil
+			return nil, nil, nil, nil, nil
 		}
 		if entityControllerPawn == 0 {
 			continue
@@ -171,7 +182,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, entityList+uintptr(0x8*((entityControllerPawn&0x7FFF)>>9)+16), &listEntry)
 		if err != nil {
 			fmt.Println("Error reading listEntry", err)
-			return nil, nil, nil, nil
+			return nil, nil, nil, nil, nil
 		}
 		if listEntry == 0 {
 			continue
@@ -180,7 +191,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, listEntry+uintptr(120)*uintptr(entityControllerPawn&0x1FF), &entityPawn)
 		if err != nil {
 			fmt.Println("Error reading entityPawn", err)
-			return nil, nil, nil, nil
+			return nil, nil, nil, nil, nil
 		}
 		if entityPawn == 0 {
 			continue
@@ -192,7 +203,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, entityPawn+offsets.M_iTeamNum, &entityTeam)
 		if err != nil {
 			fmt.Println("Error reading entityTeam", err)
-			return nil, nil, nil, nil
+			return nil, nil, nil, nil, nil
 		}
 		if entityTeam == 0 {
 			continue
@@ -202,7 +213,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 			err = read(procHandle, localPlayerP+offsets.M_iTeamNum, &localTeam)
 			if err != nil {
 				fmt.Println("Error reading localTeam", err)
-				return nil, nil, nil, nil
+				return nil, nil, nil, nil, nil
 			}
 			if localTeam == entityTeam {
 				continue
@@ -212,7 +223,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, entityPawn+offsets.M_iHealth, &entityHealth)
 		if err != nil {
 			fmt.Println("Error reading entityHealth", err)
-			return nil, nil, nil, nil
+			return nil, nil, nil, nil, nil
 		}
 		if entityHealth <= 0 {
 			continue
@@ -221,13 +232,13 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, entityController+offsets.M_sSanitizedPlayerName, &entityNameAddress)
 		if err != nil {
 			fmt.Println("Error reading entityNameAddress", err)
-			return nil, nil, nil, nil
+			return nil, nil, nil, nil, nil
 		}
 		// entityName
 		err = read(procHandle, entityNameAddress, &entityName)
 		if err != nil {
 			fmt.Println("Error reading entityName", err)
-			return nil, nil, nil, nil
+			return nil, nil, nil, nil, nil
 		}
 		if entityName == "" {
 			continue
@@ -238,39 +249,67 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 			}
 		}
 		sanitizedNameStr = sanitizedName.String()
+		// gameScene
+		err = read(procHandle, entityPawn+offsets.M_pGameSceneNode, &gameScene)
+		if err != nil {
+			fmt.Println("Error reading gameScene", err)
+			return nil, nil, nil, nil, nil
+		}
+		if gameScene == 0 {
+			continue
+		}
+		// entityBoneArray
+		err = read(procHandle, gameScene+offsets.M_modelState+offsets.M_boneArray, &entityBoneArray)
+		if err != nil {
+			fmt.Println("Error reading entityBoneArray", err)
+			return nil, nil, nil, nil, nil
+		}
+		if entityBoneArray == 0 {
+			continue
+		}
+		// entityHead
+		err = read(procHandle, entityBoneArray+6*32, &entityHead)
+		if err != nil {
+			fmt.Println("Error reading entityHead", err)
+			return nil, nil, nil, nil, nil
+		}
+		// fmt.Println(entityHead)
 		// entityOrigin
 		err = read(procHandle, entityPawn+offsets.M_vOldOrigin, &entityOrigin)
 		if err != nil {
 			fmt.Println("Error reading entityOrigin", err)
-			return nil, nil, nil, nil
+			return nil, nil, nil, nil, nil
 		}
-		entityHead := Vector3{X: entityOrigin.X, Y: entityOrigin.Y, Z: entityOrigin.Z + 70.0}
 		// viewMatrix
 		err = read(procHandle, clientDll+offsets.DwViewMatrix, &viewMatrix)
 		if err != nil {
 			fmt.Println("Error reading viewMatrix", err)
-			return nil, nil, nil, nil
+			return nil, nil, nil, nil, nil
 		}
-		screenPosHeadX, screenPosHeadY := worldToScreen(viewMatrix, entityHead)
+		entityHeadTop = Vector3{entityHead.X, entityHead.Y, entityHead.Z + 7}
+		entityHeadBottom = Vector3{entityHead.X, entityHead.Y, entityHead.Z - 5}
+		screenPosHeadX, screenPosHeadTopY := worldToScreen(viewMatrix, entityHeadTop)
+		_, screenPosHeadBottomY := worldToScreen(viewMatrix, entityHeadBottom)
 		_, screenPosFeetY := worldToScreen(viewMatrix, entityOrigin)
-		if screenPosHeadX <= -1 || screenPosFeetY <= -1 || screenPosHeadX >= float32(screenWidth) || screenPosHeadY >= float32(screenHeight) {
+		if screenPosHeadX <= -1 || screenPosFeetY <= -1 || screenPosHeadX >= float32(screenWidth) || screenPosHeadTopY >= float32(screenHeight) {
 			continue
 		}
-		boxHeight := screenPosFeetY - screenPosHeadY
+		boxHeight := screenPosFeetY - screenPosHeadTopY
 
 		entRects = append(entRects, [4][2]float32{
-			{screenPosHeadX - boxHeight/4, screenPosHeadY},
-			{screenPosHeadX + boxHeight/4, screenPosHeadY},
+			{screenPosHeadX - boxHeight/4, screenPosHeadTopY - 5},
+			{screenPosHeadX + boxHeight/4, screenPosHeadTopY - 5},
 			{screenPosHeadX + boxHeight/4, screenPosFeetY},
 			{screenPosHeadX - boxHeight/4, screenPosFeetY}})
+		entityHeadPos = append(entityHeadPos, [3]float32{screenPosHeadX, screenPosHeadTopY, screenPosHeadBottomY})
 		entityTeams = append(entityTeams, entityTeam)
 		entityHealths = append(entityHealths, entityHealth)
 		entityNames = append(entityNames, sanitizedNameStr)
 	}
-	return entRects, entityTeams, entityHealths, entityNames
+	return entRects, entityTeams, entityHealths, entityNames, entityHeadPos
 }
 
-func renderEntityInfo(hdc win.HDC, tPen uintptr, gPen uintptr, oPen uintptr, rect [4][2]float32, hp int32, name string) {
+func renderEntityInfo(hdc win.HDC, tPen uintptr, gPen uintptr, oPen uintptr, rect [4][2]float32, hp int32, name string, headPos [3]float32) {
 	// Box
 	win.SelectObject(hdc, win.HGDIOBJ(tPen))
 	win.MoveToEx(hdc, int(rect[0][0]), int(rect[0][1]), nil)
@@ -279,8 +318,16 @@ func renderEntityInfo(hdc win.HDC, tPen uintptr, gPen uintptr, oPen uintptr, rec
 	win.LineTo(hdc, int32(rect[3][0]), int32(rect[3][1]))
 	win.LineTo(hdc, int32(rect[0][0]), int32(rect[0][1]))
 
-	// Box outline
+	// Head with outline
+	radius := int32((int32(headPos[2]) - int32(headPos[1])) / 2)
 	win.SelectObject(hdc, win.HGDIOBJ(oPen))
+	win.Ellipse(hdc, int32(headPos[0])-radius-1, int32(headPos[1])-1, int32(headPos[0])+radius+1, int32(headPos[2])+1)
+	win.SelectObject(hdc, win.HGDIOBJ(tPen))
+	win.Ellipse(hdc, int32(headPos[0])-radius, int32(headPos[1]), int32(headPos[0])+radius, int32(headPos[2]))
+	win.SelectObject(hdc, win.HGDIOBJ(oPen))
+	win.Ellipse(hdc, int32(headPos[0])-radius+1, int32(headPos[1])+1, int32(headPos[0])+radius-1, int32(headPos[2])-1)
+
+	// Box outline
 	win.MoveToEx(hdc, int(rect[0][0])-1, int(rect[0][1])-1, nil)
 	win.LineTo(hdc, int32(rect[1][0])+1, int32(rect[1][1])-1)
 	win.LineTo(hdc, int32(rect[2][0])+1, int32(rect[2][1])+1)
@@ -498,12 +545,12 @@ func main() {
 		win.SetBkMode(win.HDC(memhdc), win.TRANSPARENT)
 		win.SelectObject(win.HDC(memhdc), win.HGDIOBJ(font))
 
-		rects, teams, healths, names := getEntitiesInfo(procHandle, clientDll, screenWidth, screenHeight, offsets)
+		rects, teams, healths, names, headPos := getEntitiesInfo(procHandle, clientDll, screenWidth, screenHeight, offsets)
 		for i, rect := range rects {
 			if teams[i] == 2 {
-				renderEntityInfo(win.HDC(memhdc), redPen, greenPen, outlinePen, rect, healths[i], names[i])
+				renderEntityInfo(win.HDC(memhdc), redPen, greenPen, outlinePen, rect, healths[i], names[i], headPos[i])
 			} else {
-				renderEntityInfo(win.HDC(memhdc), bluePen, greenPen, outlinePen, rect, healths[i], names[i])
+				renderEntityInfo(win.HDC(memhdc), bluePen, greenPen, outlinePen, rect, healths[i], names[i], headPos[i])
 			}
 		}
 		win.BitBlt(hdc, 0, 0, int32(screenWidth), int32(screenHeight), win.HDC(memhdc), 0, 0, win.SRCCOPY)
