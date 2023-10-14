@@ -22,7 +22,7 @@ Once you have installed Go, follow these steps:
    The `ldflags` are optional and remove debugger functionality and strip the binary resulting in smaller file size.
 5. Run the program while in a match to use.
 
-If the compiler complains about not having `"github.com/lxn/win"` and/or `"golang.org/x/sys/windows"` run `go get github.com/lxn/win` and `go get golang.org/x/sys/windows` | Finalize with `go mod tidy`
+If the compiler complains about not having `"github.com/lxn/win"`, `"golang.org/x/sys/windows"`, `"golang.org/x/sys/windows"` run `go get github.com/lxn/win`, `go get golang.org/x/sys/windows`, and `go get golang.org/x/sys/windows` | Finalize with `go mod tidy`
 ## Example
 
 Check out this video for an example of cs2go in action:
