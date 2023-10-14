@@ -382,6 +382,14 @@ func initWindow(screenWidth uintptr, screenHeight uintptr) win.HWND {
 	if result == 0 {
 		logAndSleep("Error setting layered window attributes", fmt.Errorf("%v", win.GetLastError()))
 	}
+	// Get the current extended window style
+	style := win.GetWindowLongPtr(hwnd, win.GWL_EXSTYLE)
+
+	// Add the WS_EX_TRANSPARENT style
+	style |= win.WS_EX_TRANSPARENT
+
+	// Set the new extended window style
+	win.SetWindowLongPtr(hwnd, win.GWL_EXSTYLE, style)
 
 	showCursor.Call(0)
 
