@@ -27,6 +27,6 @@ If the compiler complains about not having `"github.com/lxn/win"`, `"golang.org/
 
 Check out this video for an example of cs2go in action:
 
-[![Example video](https://cdn-cf-east.streamable.com/image/pwd7bt.jpg?Expires=1697333786148&Key-Pair-Id=APKAIEYUVEN4EVB2OKEQ&Signature=aX~z1QiaZUgVA46Pmw-1H22cc~BM4dEtx6U~jJj0HB1bP-PzIQARLF~RtL7vhk8rXsF819C1Q2TH5IIO-g5YDhyA~gHvXE6CzONAddTsPKVXoaUhfDzbHF3JqSyTxM2AWPcA7~jjEiMnJOgg8ijSZfA4KBYEl6PbTMXj4gzawZjtly-peNil2E0akMgTZq9gJ7ev~TyQczBrddQz1pvwH7FZZY4e~HsoFQMpzpqqFYg~g7VQ~6stJy6M4mBBHe~J9k2mslpK9ZghTS4oWFy3ei372l~HgbrNTmvXUNuND~uUGKCEcdoU45FOrgJF~tDbjVwTt6nD23hkt0jpAiWYXg__)](https://streamable.com/pwd7bt)
+[![Example video](https://cdn-cf-east.streamable.com/image/0qabzg.jpg?Expires=1697594705555&Key-Pair-Id=APKAIEYUVEN4EVB2OKEQ&Signature=mbcveo4kEnn35~eiMww29PrrSFQQbxkCTh3oA9dt5LgUnTmxSMNFnK7EWJbXCJgIePjW~5Q5b85dFFMSWCFga759lRr7tJhIk46C1EmcsbhWEMcjfByJ2N7AgZGKH8RBAGsPpqBlt8cTv3pXHSRf3HeUngS7aUS~z5OZMFUfPalhY3V7LXioIbMcR85oN8-zf1vfcl3P~kZo3CYA7NhlC-YlBLjcOIlPjecj9VICa8khDhqXvwI7~hkNSJD~2P983UwPhFzfffUYt60qbOQq3wFUvv8ioEaZWRGCH6pfDYEx84ZaWnYM-sSoK3~AFIhZFhEysTE8Dhw8BFirgqpZHQ__)](https://streamable.com/0qabzg)
 
 Thank you for using cs2go!
