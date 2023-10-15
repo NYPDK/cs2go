@@ -29,4 +29,9 @@ Check out this video for an example of cs2go in action:
 
 [![Example video](https://cdn-cf-east.streamable.com/image/0qabzg.jpg?Expires=1697594705555&Key-Pair-Id=APKAIEYUVEN4EVB2OKEQ&Signature=mbcveo4kEnn35~eiMww29PrrSFQQbxkCTh3oA9dt5LgUnTmxSMNFnK7EWJbXCJgIePjW~5Q5b85dFFMSWCFga759lRr7tJhIk46C1EmcsbhWEMcjfByJ2N7AgZGKH8RBAGsPpqBlt8cTv3pXHSRf3HeUngS7aUS~z5OZMFUfPalhY3V7LXioIbMcR85oN8-zf1vfcl3P~kZo3CYA7NhlC-YlBLjcOIlPjecj9VICa8khDhqXvwI7~hkNSJD~2P983UwPhFzfffUYt60qbOQq3wFUvv8ioEaZWRGCH6pfDYEx84ZaWnYM-sSoK3~AFIhZFhEysTE8Dhw8BFirgqpZHQ__)](https://streamable.com/0qabzg)
 
+## Issues
+Esp lagging?
+Search for cs2go.exe in task manager, expand, right click the process click "go to details"
+Set your priority to High, this should fix it.
+
 Thank you for using cs2go!
