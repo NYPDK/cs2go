@@ -326,14 +326,16 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		screenPosHeadX, screenPosHeadTopY := worldToScreen(viewMatrix, entityHeadTop)
 		_, screenPosHeadBottomY := worldToScreen(viewMatrix, entityHeadBottom)
 		_, screenPosFeetY := worldToScreen(viewMatrix, entityOrigin)
+		entityBoxTop := Vector3{entityOrigin.X, entityOrigin.Y, entityOrigin.Z + 70}
+		_, screenPosBoxTop := worldToScreen(viewMatrix, entityBoxTop)
 		if screenPosHeadX <= -1 || screenPosFeetY <= -1 || screenPosHeadX >= float32(screenWidth) || screenPosHeadTopY >= float32(screenHeight) {
 			continue
 		}
-		boxHeight := screenPosFeetY - screenPosHeadTopY
+		boxHeight := screenPosFeetY - screenPosBoxTop
 
 		entRects = append(entRects, [4][2]float32{
-			{screenPosHeadX - boxHeight/4, screenPosHeadTopY - 5},
-			{screenPosHeadX + boxHeight/4, screenPosHeadTopY - 5},
+			{screenPosHeadX - boxHeight/4, screenPosBoxTop},
+			{screenPosHeadX + boxHeight/4, screenPosBoxTop},
 			{screenPosHeadX + boxHeight/4, screenPosFeetY},
 			{screenPosHeadX - boxHeight/4, screenPosFeetY}})
 		entityHeadPos = append(entityHeadPos, [3]float32{screenPosHeadX, screenPosHeadTopY, screenPosHeadBottomY})
@@ -378,17 +380,6 @@ func renderEntityInfo(hdc win.HDC, tPen uintptr, gPen uintptr, oPen uintptr, hPe
 	win.LineTo(hdc, int32(rect[3][0]), int32(rect[3][1]))
 	win.LineTo(hdc, int32(rect[0][0]), int32(rect[0][1]))
 
-	if headCircle {
-		// Head with outline
-		radius := int32((int32(headPos[2]) - int32(headPos[1])) / 2)
-		win.SelectObject(hdc, win.HGDIOBJ(oPen))
-		win.Ellipse(hdc, int32(headPos[0])-radius-1, int32(headPos[1])-1, int32(headPos[0])+radius+1, int32(headPos[2])+1)
-		win.SelectObject(hdc, win.HGDIOBJ(hPen))
-		win.Ellipse(hdc, int32(headPos[0])-radius, int32(headPos[1]), int32(headPos[0])+radius, int32(headPos[2]))
-		win.SelectObject(hdc, win.HGDIOBJ(oPen))
-		win.Ellipse(hdc, int32(headPos[0])-radius+1, int32(headPos[1])+1, int32(headPos[0])+radius-1, int32(headPos[2])-1)
-	}
-
 	// Box outline
 	win.SelectObject(hdc, win.HGDIOBJ(oPen))
 	win.MoveToEx(hdc, int(rect[0][0])-1, int(rect[0][1])-1, nil)
@@ -401,6 +392,17 @@ func renderEntityInfo(hdc win.HDC, tPen uintptr, gPen uintptr, oPen uintptr, hPe
 	win.LineTo(hdc, int32(rect[2][0])-1, int32(rect[2][1])-1)
 	win.LineTo(hdc, int32(rect[3][0])+1, int32(rect[3][1])-1)
 	win.LineTo(hdc, int32(rect[0][0])+1, int32(rect[0][1])+1)
+
+	if headCircle {
+		// Head with outline
+		radius := int32((int32(headPos[2]) - int32(headPos[1])) / 2)
+		win.SelectObject(hdc, win.HGDIOBJ(oPen))
+		win.Ellipse(hdc, int32(headPos[0])-radius-1, int32(headPos[1])-1, int32(headPos[0])+radius+1, int32(headPos[2])+1)
+		win.SelectObject(hdc, win.HGDIOBJ(hPen))
+		win.Ellipse(hdc, int32(headPos[0])-radius, int32(headPos[1]), int32(headPos[0])+radius, int32(headPos[2]))
+		win.SelectObject(hdc, win.HGDIOBJ(oPen))
+		win.Ellipse(hdc, int32(headPos[0])-radius+1, int32(headPos[1])+1, int32(headPos[0])+radius-1, int32(headPos[2])-1)
+	}
 
 	// Health bar
 	win.SelectObject(hdc, win.HGDIOBJ(gPen))
