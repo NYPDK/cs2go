@@ -25,6 +25,28 @@ type Vector3 struct {
 	Z float32
 }
 
+type Vector2 struct {
+	X float32
+	Y float32
+}
+
+type Rectangle struct {
+	Top    float32
+	Left   float32
+	Right  float32
+	Bottom float32
+}
+
+type Entity struct {
+	Health   int32
+	Team     int32
+	Name     string
+	Position Vector2
+	Bones    map[string]Vector2
+	HeadPos  Vector3
+	Rect     Rectangle
+}
+
 type Offset struct {
 	DwViewMatrix           uintptr `json:"dwViewMatrix"`
 	DwLocalPlayerPawn      uintptr `json:"dwLocalPlayerPawn"`
@@ -53,9 +75,13 @@ var (
 )
 
 var (
-	teamCheck         bool = true
-	headCircle        bool = true
-	skeletonRendering bool = true
+	teamCheck           bool = true
+	headCircle          bool = true
+	skeletonRendering   bool = true
+	boxRendering        bool = true
+	nameRendering       bool = true
+	healthBarRendering  bool = true
+	healthTextRendering bool = true
 )
 
 func init() {
@@ -111,12 +137,13 @@ func getOffsets() Offset {
 	return offsets
 }
 
-func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth uintptr, screenHeight uintptr, offsets Offset) ([][4][2]float32, []int32, []int32, []string, [][3]float32, []map[string]Vector3) {
+func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth uintptr, screenHeight uintptr, offsets Offset) []Entity {
 	var entityList uintptr
+	var entities []Entity
 	err := read(procHandle, clientDll+offsets.DwEntityList, &entityList)
 	if err != nil {
 		fmt.Println("Error reading initial entityList", err)
-		return nil, nil, nil, nil, nil, nil
+		return entities
 	}
 	var (
 		localPlayerP         uintptr
@@ -160,28 +187,21 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		entityHeadTop    Vector3
 		entityHeadBottom Vector3
 	)
-	var (
-		entityBonesPos []map[string]Vector3
-		entRects       [][4][2]float32
-		entityHeadPos  [][3]float32
-		entityTeams    []int32
-		entityHealths  []int32
-		entityNames    []string
-	)
 	// localPlayerP
 	err = read(procHandle, clientDll+offsets.DwLocalPlayerPawn, &localPlayerP)
 	if err != nil {
 		// fmt.Println("Error reading localPlayerP", err)
-		return nil, nil, nil, nil, nil, nil
+		return entities
 	}
 	for i := 0; i < 64; i++ {
-		var entityBones map[string]Vector3 = make(map[string]Vector3)
+		var tempEntity Entity
+		var entityBones map[string]Vector2 = make(map[string]Vector2)
 		var sanitizedName strings.Builder
 		// listEntry
 		err = read(procHandle, entityList+uintptr((8*(i&0x7FFF)>>9)+16), &listEntry)
 		if err != nil {
 			// fmt.Println("Error reading listEntry", err)
-			return nil, nil, nil, nil, nil, nil
+			return entities
 		}
 		if listEntry == 0 {
 			continue
@@ -190,7 +210,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, listEntry+uintptr(120)*uintptr(i&0x1FF), &entityController)
 		if err != nil {
 			// fmt.Println("Error reading entityController", err)
-			return nil, nil, nil, nil, nil, nil
+			return entities
 		}
 		if entityController == 0 {
 			continue
@@ -199,7 +219,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, entityController+offsets.M_hPlayerPawn, &entityControllerPawn)
 		if err != nil {
 			// fmt.Println("Error reading entityControllerPawn", err)
-			return nil, nil, nil, nil, nil, nil
+			return entities
 		}
 		if entityControllerPawn == 0 {
 			continue
@@ -208,7 +228,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, entityList+uintptr(0x8*((entityControllerPawn&0x7FFF)>>9)+16), &listEntry)
 		if err != nil {
 			// fmt.Println("Error reading listEntry", err)
-			return nil, nil, nil, nil, nil, nil
+			return entities
 		}
 		if listEntry == 0 {
 			continue
@@ -217,7 +237,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, listEntry+uintptr(120)*uintptr(entityControllerPawn&0x1FF), &entityPawn)
 		if err != nil {
 			// fmt.Println("Error reading entityPawn", err)
-			return nil, nil, nil, nil, nil, nil
+			return entities
 		}
 		if entityPawn == 0 {
 			continue
@@ -229,7 +249,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, entityPawn+offsets.M_iTeamNum, &entityTeam)
 		if err != nil {
 			// fmt.Println("Error reading entityTeam", err)
-			return nil, nil, nil, nil, nil, nil
+			return entities
 		}
 		if entityTeam == 0 {
 			continue
@@ -239,7 +259,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 			err = read(procHandle, localPlayerP+offsets.M_iTeamNum, &localTeam)
 			if err != nil {
 				// fmt.Println("Error reading localTeam", err)
-				return nil, nil, nil, nil, nil, nil
+				return entities
 			}
 			if localTeam == entityTeam {
 				continue
@@ -249,22 +269,22 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, entityPawn+offsets.M_iHealth, &entityHealth)
 		if err != nil {
 			// fmt.Println("Error reading entityHealth", err)
-			return nil, nil, nil, nil, nil, nil
+			return entities
 		}
-		if entityHealth <= 0 {
+		if entityHealth < 1 || entityHealth > 100 {
 			continue
 		}
 		// entityNameAddress
 		err = read(procHandle, entityController+offsets.M_sSanitizedPlayerName, &entityNameAddress)
 		if err != nil {
 			// fmt.Println("Error reading entityNameAddress", err)
-			return nil, nil, nil, nil, nil, nil
+			return entities
 		}
 		// entityName
 		err = read(procHandle, entityNameAddress, &entityName)
 		if err != nil {
 			// fmt.Println("Error reading entityName", err)
-			return nil, nil, nil, nil, nil, nil
+			return entities
 		}
 		if entityName == "" {
 			continue
@@ -279,7 +299,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, entityPawn+offsets.M_pGameSceneNode, &gameScene)
 		if err != nil {
 			// fmt.Println("Error reading gameScene", err)
-			return nil, nil, nil, nil, nil, nil
+			return entities
 		}
 		if gameScene == 0 {
 			continue
@@ -288,7 +308,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, gameScene+offsets.M_modelState+offsets.M_boneArray, &entityBoneArray)
 		if err != nil {
 			// fmt.Println("Error reading entityBoneArray", err)
-			return nil, nil, nil, nil, nil, nil
+			return entities
 		}
 		if entityBoneArray == 0 {
 			continue
@@ -297,20 +317,20 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		err = read(procHandle, entityPawn+offsets.M_vOldOrigin, &entityOrigin)
 		if err != nil {
 			// fmt.Println("Error reading entityOrigin", err)
-			return nil, nil, nil, nil, nil, nil
+			return entities
 		}
 		// viewMatrix
 		err = read(procHandle, clientDll+offsets.DwViewMatrix, &viewMatrix)
 		if err != nil {
 			// fmt.Println("Error reading viewMatrix", err)
-			return nil, nil, nil, nil, nil, nil
+			return entities
 		}
 		// boneArray
 		for boneName, boneIndex := range bones {
 			err = read(procHandle, entityBoneArray+uintptr(boneIndex)*32, &currentBone)
 			if err != nil {
 				// fmt.Println("Error reading boneArray", err)
-				return nil, nil, nil, nil, nil, nil
+				return entities
 			}
 			if boneName == "head" {
 				entityHead = currentBone
@@ -319,13 +339,13 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 				}
 			}
 			boneX, boneY := worldToScreen(viewMatrix, currentBone)
-			entityBones[boneName] = Vector3{boneX, boneY, 0}
+			entityBones[boneName] = Vector2{boneX, boneY}
 		}
 		entityHeadTop = Vector3{entityHead.X, entityHead.Y, entityHead.Z + 7}
 		entityHeadBottom = Vector3{entityHead.X, entityHead.Y, entityHead.Z - 5}
 		screenPosHeadX, screenPosHeadTopY := worldToScreen(viewMatrix, entityHeadTop)
 		_, screenPosHeadBottomY := worldToScreen(viewMatrix, entityHeadBottom)
-		_, screenPosFeetY := worldToScreen(viewMatrix, entityOrigin)
+		screenPosFeetX, screenPosFeetY := worldToScreen(viewMatrix, entityOrigin)
 		entityBoxTop := Vector3{entityOrigin.X, entityOrigin.Y, entityOrigin.Z + 70}
 		_, screenPosBoxTop := worldToScreen(viewMatrix, entityBoxTop)
 		if screenPosHeadX <= -1 || screenPosFeetY <= -1 || screenPosHeadX >= float32(screenWidth) || screenPosHeadTopY >= float32(screenHeight) {
@@ -333,21 +353,20 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 		}
 		boxHeight := screenPosFeetY - screenPosBoxTop
 
-		entRects = append(entRects, [4][2]float32{
-			{screenPosHeadX - boxHeight/4, screenPosBoxTop},
-			{screenPosHeadX + boxHeight/4, screenPosBoxTop},
-			{screenPosHeadX + boxHeight/4, screenPosFeetY},
-			{screenPosHeadX - boxHeight/4, screenPosFeetY}})
-		entityHeadPos = append(entityHeadPos, [3]float32{screenPosHeadX, screenPosHeadTopY, screenPosHeadBottomY})
-		entityTeams = append(entityTeams, entityTeam)
-		entityHealths = append(entityHealths, entityHealth)
-		entityNames = append(entityNames, sanitizedNameStr)
-		entityBonesPos = append(entityBonesPos, entityBones)
+		tempEntity.Health = entityHealth
+		tempEntity.Team = entityTeam
+		tempEntity.Name = sanitizedNameStr
+		tempEntity.Position = Vector2{screenPosFeetX, screenPosFeetY}
+		tempEntity.Bones = entityBones
+		tempEntity.HeadPos = Vector3{screenPosHeadX, screenPosHeadTopY, screenPosHeadBottomY}
+		tempEntity.Rect = Rectangle{screenPosBoxTop, screenPosHeadX - boxHeight/4, screenPosHeadX + boxHeight/4, screenPosFeetY}
+
+		entities = append(entities, tempEntity)
 	}
-	return entRects, entityTeams, entityHealths, entityNames, entityHeadPos, entityBonesPos
+	return entities
 }
 
-func drawSkeleton(hdc win.HDC, pen uintptr, bones map[string]Vector3) {
+func drawSkeleton(hdc win.HDC, pen uintptr, bones map[string]Vector2) {
 	win.SelectObject(hdc, win.HGDIOBJ(pen))
 	win.MoveToEx(hdc, int(bones["head"].X), int(bones["head"].Y), nil)
 	win.LineTo(hdc, int32(bones["neck_0"].X), int32(bones["neck_0"].Y))
@@ -371,57 +390,76 @@ func drawSkeleton(hdc win.HDC, pen uintptr, bones map[string]Vector3) {
 	win.LineTo(hdc, int32(bones["hand_R"].X), int32(bones["hand_R"].Y))
 }
 
-func renderEntityInfo(hdc win.HDC, tPen uintptr, gPen uintptr, oPen uintptr, hPen uintptr, rect [4][2]float32, hp int32, name string, headPos [3]float32) {
-	// Box
-	win.SelectObject(hdc, win.HGDIOBJ(tPen))
-	win.MoveToEx(hdc, int(rect[0][0]), int(rect[0][1]), nil)
-	win.LineTo(hdc, int32(rect[1][0]), int32(rect[1][1]))
-	win.LineTo(hdc, int32(rect[2][0]), int32(rect[2][1]))
-	win.LineTo(hdc, int32(rect[3][0]), int32(rect[3][1]))
-	win.LineTo(hdc, int32(rect[0][0]), int32(rect[0][1]))
+func renderEntityInfo(hdc win.HDC, tPen uintptr, gPen uintptr, oPen uintptr, hPen uintptr, rect Rectangle, hp int32, name string, headPos Vector3) {
+	if boxRendering {
+		// Box
+		win.SelectObject(hdc, win.HGDIOBJ(tPen))
+		win.MoveToEx(hdc, int(rect.Left), int(rect.Top), nil)
+		win.LineTo(hdc, int32(rect.Right), int32(rect.Top))
+		win.LineTo(hdc, int32(rect.Right), int32(rect.Bottom))
+		win.LineTo(hdc, int32(rect.Left), int32(rect.Bottom))
+		win.LineTo(hdc, int32(rect.Left), int32(rect.Top))
 
-	// Box outline
-	win.SelectObject(hdc, win.HGDIOBJ(oPen))
-	win.MoveToEx(hdc, int(rect[0][0])-1, int(rect[0][1])-1, nil)
-	win.LineTo(hdc, int32(rect[1][0])+1, int32(rect[1][1])-1)
-	win.LineTo(hdc, int32(rect[2][0])+1, int32(rect[2][1])+1)
-	win.LineTo(hdc, int32(rect[3][0])-1, int32(rect[3][1])+1)
-	win.LineTo(hdc, int32(rect[0][0])-1, int32(rect[0][1])-1)
-	win.MoveToEx(hdc, int(rect[0][0])+1, int(rect[0][1])+1, nil)
-	win.LineTo(hdc, int32(rect[1][0])-1, int32(rect[1][1])+1)
-	win.LineTo(hdc, int32(rect[2][0])-1, int32(rect[2][1])-1)
-	win.LineTo(hdc, int32(rect[3][0])+1, int32(rect[3][1])-1)
-	win.LineTo(hdc, int32(rect[0][0])+1, int32(rect[0][1])+1)
+		// Box outline
+		win.SelectObject(hdc, win.HGDIOBJ(oPen))
+		win.MoveToEx(hdc, int(rect.Left)-1, int(rect.Top)-1, nil)
+		win.LineTo(hdc, int32(rect.Right)-1, int32(rect.Top)+1)
+		win.LineTo(hdc, int32(rect.Right)+1, int32(rect.Bottom)+1)
+		win.LineTo(hdc, int32(rect.Left)+1, int32(rect.Bottom)-1)
+		win.LineTo(hdc, int32(rect.Left)-1, int32(rect.Top)-1)
+		win.MoveToEx(hdc, int(rect.Left)+1, int(rect.Top)+1, nil)
+		win.LineTo(hdc, int32(rect.Right)+1, int32(rect.Top)-1)
+		win.LineTo(hdc, int32(rect.Right)-1, int32(rect.Bottom)-1)
+		win.LineTo(hdc, int32(rect.Left)-1, int32(rect.Bottom)+1)
+		win.LineTo(hdc, int32(rect.Left)+1, int32(rect.Top)+1)
+	}
 
 	if headCircle {
 		// Head with outline
-		radius := int32((int32(headPos[2]) - int32(headPos[1])) / 2)
+		radius := int32((int32(headPos.Z) - int32(headPos.Y)) / 2)
 		win.SelectObject(hdc, win.HGDIOBJ(oPen))
-		win.Ellipse(hdc, int32(headPos[0])-radius-1, int32(headPos[1])-1, int32(headPos[0])+radius+1, int32(headPos[2])+1)
+		win.Ellipse(hdc, int32(headPos.X)-radius-1, int32(headPos.Y)-1, int32(headPos.X)+radius+1, int32(headPos.Z)+1)
 		win.SelectObject(hdc, win.HGDIOBJ(hPen))
-		win.Ellipse(hdc, int32(headPos[0])-radius, int32(headPos[1]), int32(headPos[0])+radius, int32(headPos[2]))
+		win.Ellipse(hdc, int32(headPos.X)-radius, int32(headPos.Y), int32(headPos.X)+radius, int32(headPos.Z))
 		win.SelectObject(hdc, win.HGDIOBJ(oPen))
-		win.Ellipse(hdc, int32(headPos[0])-radius+1, int32(headPos[1])+1, int32(headPos[0])+radius-1, int32(headPos[2])-1)
+		win.Ellipse(hdc, int32(headPos.X)-radius+1, int32(headPos.Y)+1, int32(headPos.X)+radius-1, int32(headPos.Z)-1)
 	}
 
-	// Health bar
-	win.SelectObject(hdc, win.HGDIOBJ(gPen))
-	win.MoveToEx(hdc, int(rect[0][0])-4, int(rect[3][1])+1-int(float64(int(rect[3][1])+1-int(rect[0][1]))*float64(hp)/100.0), nil)
-	win.LineTo(hdc, int32(rect[3][0])-4, int32(rect[3][1])+1)
+	if healthBarRendering {
+		// Health bar
+		win.SelectObject(hdc, win.HGDIOBJ(gPen))
+		win.MoveToEx(hdc, int(rect.Left)-4, int(rect.Bottom)+1-int(float64(int(rect.Bottom)+1-int(rect.Top))*float64(hp)/100.0), nil)
+		win.LineTo(hdc, int32(rect.Left)-4, int32(rect.Bottom)+1)
 
-	// Health bar outline
-	win.SelectObject(hdc, win.HGDIOBJ(oPen))
-	win.MoveToEx(hdc, int(rect[0][0])-5, int(rect[0][1])-1, nil)
-	win.LineTo(hdc, int32(rect[0][0])-5, int32(rect[3][1])+1)
-	win.LineTo(hdc, int32(rect[0][0])-3, int32(rect[3][1])+1)
-	win.LineTo(hdc, int32(rect[0][0])-3, int32(rect[0][1])-1)
-	win.LineTo(hdc, int32(rect[0][0])-5, int32(rect[0][1])-1)
+		// Health bar outline
+		win.SelectObject(hdc, win.HGDIOBJ(oPen))
+		win.MoveToEx(hdc, int(rect.Left)-5, int(rect.Top)-1, nil)
+		win.LineTo(hdc, int32(rect.Left)-5, int32(rect.Bottom)+1)
+		win.LineTo(hdc, int32(rect.Left)-3, int32(rect.Bottom)+1)
+		win.LineTo(hdc, int32(rect.Left)-3, int32(rect.Top)-1)
+		win.LineTo(hdc, int32(rect.Left)-5, int32(rect.Top)-1)
+	}
 
-	// Name
-	text, _ := windows.UTF16PtrFromString(name)
-	win.SetTextColor(hdc, win.COLORREF(0xFFFFFF))
-	setTextAlign.Call(uintptr(hdc), 0x00000006) // Set text alignment to center
-	win.TextOut(hdc, int32(rect[0][0])+int32((int32(rect[1][0])-int32(rect[0][0]))/2), int32(rect[0][1])-14, text, int32(len(name)))
+	if healthTextRendering {
+		// Health text
+		text, _ := windows.UTF16PtrFromString(fmt.Sprintf("%d", hp))
+		win.SetTextColor(hdc, win.COLORREF(0x00FF00))
+		// Set text right alignment
+		setTextAlign.Call(uintptr(hdc), 0x00000002)
+		if healthBarRendering {
+			win.TextOut(hdc, int32(rect.Left)-8, int32(int(rect.Bottom)+1-int(float64(int(rect.Bottom)+1-int(rect.Top))*float64(hp)/100.0)), text, int32(len(fmt.Sprintf("%d", hp))))
+		} else {
+			win.TextOut(hdc, int32(rect.Left)-4, int32(rect.Top), text, int32(len(fmt.Sprintf("%d", hp))))
+		}
+	}
+
+	if nameRendering {
+		// Name
+		text, _ := windows.UTF16PtrFromString(name)
+		win.SetTextColor(hdc, win.COLORREF(0xFFFFFF))
+		setTextAlign.Call(uintptr(hdc), 0x00000006) // Set text alignment to center
+		win.TextOut(hdc, int32(rect.Left)+int32((int32(rect.Right)-int32(rect.Left))/2), int32(rect.Top)-14, text, int32(len(name)))
+	}
 }
 
 func windowProc(hwnd win.HWND, msg uint32, wParam, lParam uintptr) uintptr {
@@ -512,25 +550,66 @@ func initWindow(screenWidth uintptr, screenHeight uintptr) win.HWND {
 
 func cliMenu() {
 	for {
-		fmt.Print(chalk.Magenta.Color("          ____             \n  ___ ___|___ \\ __ _  ___  \n / __/ __| __) / _` |/ _ \\ \n| (__\\__ \\/ __/ (_| | (_) |\n \\___|___/_____\\__, |\\___/ \n               |___/       \n"))
+		fmt.Print(chalk.Magenta.Color("          ____             \n  ___ ___|___ \\ ____  ___  \n / __/ __| __) / _  |/ _ \\ \n| (__\\__ \\/ __/ (_| | (_) |\n \\___|___/_____\\__, |\\___/ \n               |___/       \n"))
 		fmt.Println(chalk.Dim.TextStyle("\t\tby bqj\n"))
-		fmt.Println(chalk.Cyan.Color("[1] Toggle team check"))
-		fmt.Println(chalk.Cyan.Color("[2] Toggle head indicator"))
-		fmt.Println(chalk.Cyan.Color("[3] Toggle skeleton"))
-		fmt.Println(chalk.Cyan.Color("[4] Exit"))
-		fmt.Print(chalk.Red.Color("[Enter selection]: "))
+		if teamCheck {
+			fmt.Println(chalk.Green.Color("[1] Team check [ON]"))
+		} else {
+			fmt.Println(chalk.Red.Color("[1] Team check [OFF]"))
+		}
+		if headCircle {
+			fmt.Println(chalk.Green.Color("[2] Head circle [ON]"))
+		} else {
+			fmt.Println(chalk.Red.Color("[2] Head circle [OFF]"))
+		}
+		if skeletonRendering {
+			fmt.Println(chalk.Green.Color("[3] Skeleton rendering [ON]"))
+		} else {
+			fmt.Println(chalk.Red.Color("[3] Skeleton rendering [OFF]"))
+		}
+		if boxRendering {
+			fmt.Println(chalk.Green.Color("[4] Box rendering [ON]"))
+		} else {
+			fmt.Println(chalk.Red.Color("[4] Box rendering [OFF]"))
+		}
+		if healthBarRendering {
+			fmt.Println(chalk.Green.Color("[5] Health bar rendering [ON]"))
+		} else {
+			fmt.Println(chalk.Red.Color("[5] Health bar rendering [OFF]"))
+		}
+		if healthTextRendering {
+			fmt.Println(chalk.Green.Color("[6] Health text rendering [ON]"))
+		} else {
+			fmt.Println(chalk.Red.Color("[6] Health text rendering [OFF]"))
+		}
+		if nameRendering {
+			fmt.Println(chalk.Green.Color("[7] Name rendering [ON]"))
+		} else {
+			fmt.Println(chalk.Red.Color("[7] Name rendering [OFF]"))
+		}
+		fmt.Println(chalk.Red.Color("[8] Exit"))
+		fmt.Print(chalk.Cyan.Color("[Enter selection]: "))
 		var input string
 		fmt.Scanln(&input)
-		if input == "1" {
+		switch input {
+		case "1":
 			teamCheck = !teamCheck
-		} else if input == "2" {
+		case "2":
 			headCircle = !headCircle
-		} else if input == "3" {
+		case "3":
 			skeletonRendering = !skeletonRendering
-		} else if input == "4" {
+		case "4":
+			boxRendering = !boxRendering
+		case "5":
+			healthBarRendering = !healthBarRendering
+		case "6":
+			healthTextRendering = !healthTextRendering
+		case "7":
+			nameRendering = !nameRendering
+		case "8":
 			os.Exit(0)
-		} else {
-			fmt.Println(chalk.Magenta.Color("Invalid input"))
+		default:
+			fmt.Println(chalk.Red.Color("Invalid selection"))
 			time.Sleep(1 * time.Second)
 		}
 		// Clear the console
@@ -632,15 +711,15 @@ func main() {
 		win.SetBkMode(win.HDC(memhdc), win.TRANSPARENT)
 		win.SelectObject(win.HDC(memhdc), win.HGDIOBJ(font))
 
-		rects, teams, healths, names, headPos, bones := getEntitiesInfo(procHandle, clientDll, screenWidth, screenHeight, offsets)
-		for i, rect := range rects {
+		entities := getEntitiesInfo(procHandle, clientDll, screenWidth, screenHeight, offsets)
+		for _, entity := range entities {
 			if skeletonRendering {
-				drawSkeleton(win.HDC(memhdc), bonePen, bones[i])
+				drawSkeleton(win.HDC(memhdc), bonePen, entity.Bones)
 			}
-			if teams[i] == 2 {
-				renderEntityInfo(win.HDC(memhdc), redPen, greenPen, outlinePen, bonePen, rect, healths[i], names[i], headPos[i])
+			if entity.Team == 2 {
+				renderEntityInfo(win.HDC(memhdc), redPen, greenPen, outlinePen, bonePen, entity.Rect, entity.Health, entity.Name, entity.HeadPos)
 			} else {
-				renderEntityInfo(win.HDC(memhdc), bluePen, greenPen, outlinePen, bonePen, rect, healths[i], names[i], headPos[i])
+				renderEntityInfo(win.HDC(memhdc), bluePen, greenPen, outlinePen, bonePen, entity.Rect, entity.Health, entity.Name, entity.HeadPos)
 			}
 		}
 		win.BitBlt(hdc, 0, 0, int32(screenWidth), int32(screenHeight), win.HDC(memhdc), 0, 0, win.SRCCOPY)
