@@ -27,7 +27,7 @@ If the compiler complains about not having `"github.com/lxn/win"`, `"golang.org/
 
 Check out this video for an example of cs2go in action:
 
-[![Example video](https://cdn-cf-east.streamable.com/image/0qabzg.jpg?Expires=1697594705555&Key-Pair-Id=APKAIEYUVEN4EVB2OKEQ&Signature=mbcveo4kEnn35~eiMww29PrrSFQQbxkCTh3oA9dt5LgUnTmxSMNFnK7EWJbXCJgIePjW~5Q5b85dFFMSWCFga759lRr7tJhIk46C1EmcsbhWEMcjfByJ2N7AgZGKH8RBAGsPpqBlt8cTv3pXHSRf3HeUngS7aUS~z5OZMFUfPalhY3V7LXioIbMcR85oN8-zf1vfcl3P~kZo3CYA7NhlC-YlBLjcOIlPjecj9VICa8khDhqXvwI7~hkNSJD~2P983UwPhFzfffUYt60qbOQq3wFUvv8ioEaZWRGCH6pfDYEx84ZaWnYM-sSoK3~AFIhZFhEysTE8Dhw8BFirgqpZHQ__)](https://streamable.com/0qabzg)
+[![Example video](https://cdn-cf-east.streamable.com/image/zfdhd2.jpg?Expires=1697728523377&Key-Pair-Id=APKAIEYUVEN4EVB2OKEQ&Signature=Aa-U31-JQ7qM6QtpmCDH6xhnBWVkxSjMgY1olIlcVybPyZbQ0xdXaG6meRG5vfJlDttOBxAR7s48EEpr8GZca5SuxAKcpHRsqOYAeCnlIrP2LkcT3iIJ~VYy76I-AFUVYZVdnwTe8g6drr4IYMBCr7QIeDjOTjopKZYHi9-mcZ2X0YWiW~wCPcJKp6n3ariZAtdJvSsvUXi0TIMFCw0sKpFJFw80ytUMCNNDMgFa7GzWJvoudQ~j7QKIVBfJdISA6T3V9hld6FmXirYRWQqHVpMphmdfgv0U5LlSMZnk-hXD9JpD-UTTZhrg-RTLnLjTdP5UQ1ZDJ40OqLl6i~jMsA__)](https://streamable.com/zfdhd2)
 
 ## Issues
 Esp lagging?
