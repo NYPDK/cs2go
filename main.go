@@ -142,7 +142,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 	var entities []Entity
 	err := read(procHandle, clientDll+offsets.DwEntityList, &entityList)
 	if err != nil {
-		fmt.Println("Error reading initial entityList", err)
+		// fmt.Println("Error reading initial entityList", err)
 		return entities
 	}
 	var (
