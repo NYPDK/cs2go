@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -126,26 +125,27 @@ func worldToScreen(viewMatrix Matrix, position Vector3) (float32, float32) {
 	return x, y
 }
 
-func getOffsets() Offset {
-	var offsets Offset
+/*
+	func getOffsets() Offset {
+		var offsets Offset
 
-	// Open the file
-	offsetsJson, err := os.Open("offsets.json")
-	if err != nil {
-		fmt.Println("Error opening offsets.json", err)
+		// Open the file
+		offsetsJson, err := os.Open("offsets.json")
+		if err != nil {
+			fmt.Println("Error opening offsets.json", err)
+			return offsets
+		}
+		defer offsetsJson.Close()
+
+		// Decode the JSON
+		err = json.NewDecoder(offsetsJson).Decode(&offsets)
+		if err != nil {
+			fmt.Println("Error decoding JSON:", err)
+			return offsets
+		}
 		return offsets
 	}
-	defer offsetsJson.Close()
-
-	// Decode the JSON
-	err = json.NewDecoder(offsetsJson).Decode(&offsets)
-	if err != nil {
-		fmt.Println("Error decoding JSON:", err)
-		return offsets
-	}
-	return offsets
-}
-
+*/
 func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth uintptr, screenHeight uintptr, offsets Offset) []Entity {
 	var entityList uintptr
 	var entities []Entity
