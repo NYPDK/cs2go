@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode"
 	"unsafe"
+	"net/http"
 
 	"github.com/lxn/win"
 	"github.com/ttacon/chalk"
@@ -638,7 +639,131 @@ func cliMenu() {
 	}
 }
 
+type OffsetsJSONfile struct {
+    DwViewMatrix          uintptr
+    DwLocalPlayerPawn     uintptr
+    DwEntityList          uintptr
+    M_hPlayerPawn         uintptr
+    M_iHealth             uintptr
+    M_lifeState           uintptr
+    M_iTeamNum            uintptr
+    M_vOldOrigin          uintptr
+    M_pGameSceneNode      uintptr
+    M_modelState          uintptr
+    M_sSanitizedPlayerName uintptr
+    M_nodeToWorld         uintptr
+    M_boneArray           uintptr
+}
+
+func getOffsetsData() (*OffsetsJSONfile, error) {
+    offsetURL := "put a2x's raw github link /main/output/offsets.json"
+    clientURL := "put a2x's raw github link /main/output/client_dll.json"
+
+    // Fetch offsets
+    offsetResp, err := http.Get(offsetURL)
+    if err != nil {
+        return nil, err
+    }
+    defer offsetResp.Body.Close()
+
+    var offsetData map[string]map[string]interface{}
+    if err := json.NewDecoder(offsetResp.Body).Decode(&offsetData); err != nil {
+        return nil, err
+    }
+
+    // Fetch client data
+    clientResp, err := http.Get(clientURL)
+    if err != nil {
+        return nil, err
+    }
+    defer clientResp.Body.Close()
+
+    var clientData map[string]interface{}
+    if err := json.NewDecoder(clientResp.Body).Decode(&clientData); err != nil {
+        return nil, err
+    }
+
+    // Type assertions for nested maps
+    classes, ok := clientData["client.dll"].(map[string]interface{})["classes"].(map[string]interface{})
+    if !ok {
+        return nil, fmt.Errorf("failed to assert classes map")
+    }
+
+    baseEntityFields, ok := classes["C_BaseEntity"].(map[string]interface{})["fields"].(map[string]interface{})
+    if !ok {
+        return nil, fmt.Errorf("failed to assert C_BaseEntity fields map")
+    }
+
+    playerControllerFields, ok := classes["CCSPlayerController"].(map[string]interface{})["fields"].(map[string]interface{})
+    if !ok {
+        return nil, fmt.Errorf("failed to assert CCSPlayerController fields map")
+    }
+
+    basePlayerPawnFields, ok := classes["C_BasePlayerPawn"].(map[string]interface{})["fields"].(map[string]interface{})
+    if !ok {
+        return nil, fmt.Errorf("failed to assert CBasePlayerPawn fields map")
+    }
+
+    skeletonInstanceFields, ok := classes["CSkeletonInstance"].(map[string]interface{})["fields"].(map[string]interface{})
+    if !ok {
+        return nil, fmt.Errorf("failed to assert CSkeletonInstance fields map")
+    }
+
+    gameSceneNodeFields, ok := classes["CGameSceneNode"].(map[string]interface{})["fields"].(map[string]interface{})
+    if !ok {
+        return nil, fmt.Errorf("failed to assert CGameSceneNode fields map")
+    }
+
+    // Set variables
+    offsetz := &OffsetsJSONfile{
+        DwEntityList:           uintptr(offsetData["client.dll"]["dwEntityList"].(float64)),
+        DwViewMatrix:           uintptr(offsetData["client.dll"]["dwViewMatrix"].(float64)),
+        DwLocalPlayerPawn:      uintptr(offsetData["client.dll"]["dwLocalPlayerPawn"].(float64)),
+        M_hPlayerPawn:          uintptr(playerControllerFields["m_hPlayerPawn"].(float64)),
+        M_lifeState:            uintptr(baseEntityFields["m_lifeState"].(float64)),
+        M_iHealth:              uintptr(baseEntityFields["m_iHealth"].(float64)),
+        M_iTeamNum:             uintptr(baseEntityFields["m_iTeamNum"].(float64)),
+        M_vOldOrigin:           uintptr(basePlayerPawnFields["m_vOldOrigin"].(float64)),
+        M_pGameSceneNode:       uintptr(baseEntityFields["m_pGameSceneNode"].(float64)),
+        M_modelState:           uintptr(skeletonInstanceFields["m_modelState"].(float64)),
+        M_sSanitizedPlayerName: uintptr(playerControllerFields["m_sSanitizedPlayerName"].(float64)),
+        M_nodeToWorld:          uintptr(gameSceneNodeFields["m_nodeToWorld"].(float64)),
+        M_boneArray:            128, // Added M_boneArray with a fixed value of 128
+    }
+
+    return offsetz, nil
+}
+
 func main() {
+
+	offsetdata2, err := getOffsetsData()
+    if err != nil {
+        fmt.Println("Error fetching offsets:", err)
+        return
+    }
+
+    // Create or open the offsets.json file
+    file, err := os.Create("offsets.json")
+    if err != nil {
+        fmt.Println("Error creating offsets.json:", err)
+        return
+    }
+    defer file.Close()
+
+    // Marshal the offsets struct to JSON
+    offsetsJSON, err := json.MarshalIndent(offsetdata2, "", "    ")
+    if err != nil {
+        fmt.Println("Error marshaling offsets to JSON:", err)
+        return
+    }
+
+    // Write the JSON data to the file
+    _, err = file.Write(offsetsJSON)
+    if err != nil {
+        fmt.Println("Error writing to offsets.json:", err)
+        return
+    	}
+	
 	go cliMenu()
 
 	screenWidth, _, _ := getSystemMetrics.Call(0)
