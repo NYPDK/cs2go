@@ -566,7 +566,7 @@ func initWindow(screenWidth uintptr, screenHeight uintptr) win.HWND {
 func cliMenu() {
 	for {
 		fmt.Print(chalk.Magenta.Color("          ____             \n  ___ ___|___ \\ ____  ___  \n / __/ __| __) / _  |/ _ \\ \n| (__\\__ \\/ __/ (_| | (_) |\n \\___|___/_____\\__, |\\___/ \n               |___/       \n"))
-		fmt.Println(chalk.Dim.TextStyle("\t\tby bqj - v1.6\n"))
+		fmt.Println(chalk.Dim.TextStyle("\t\tby bqj - v1.6.2\n"))
 		if teamCheck {
 			fmt.Println(chalk.Green.Color("[1] Team check [ON]"))
 		} else {
