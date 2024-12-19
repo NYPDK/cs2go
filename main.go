@@ -568,39 +568,39 @@ func cliMenu() {
 		fmt.Print(chalk.Magenta.Color("          ____             \n  ___ ___|___ \\ ____  ___  \n / __/ __| __) / _  |/ _ \\ \n| (__\\__ \\/ __/ (_| | (_) |\n \\___|___/_____\\__, |\\___/ \n               |___/       \n"))
 		fmt.Println(chalk.Dim.TextStyle("\t\tby bqj - v1.6.2\n"))
 		if teamCheck {
-			fmt.Println(chalk.Green.Color("[1] Team check [ON]"))
+			fmt.Println(chalk.Green.Color("[1] Team check		[ON]"))
 		} else {
-			fmt.Println(chalk.Red.Color("[1] Team check [OFF]"))
+			fmt.Println(chalk.Red.Color("[1] Team check		[OFF]"))
 		}
 		if headCircle {
-			fmt.Println(chalk.Green.Color("[2] Head circle [ON]"))
+			fmt.Println(chalk.Green.Color("[2] Head circle		[ON]"))
 		} else {
-			fmt.Println(chalk.Red.Color("[2] Head circle [OFF]"))
+			fmt.Println(chalk.Red.Color("[2] Head circle		[OFF]"))
 		}
 		if skeletonRendering {
-			fmt.Println(chalk.Green.Color("[3] Skeleton rendering [ON]"))
+			fmt.Println(chalk.Green.Color("[3] Skeleton		[ON]"))
 		} else {
-			fmt.Println(chalk.Red.Color("[3] Skeleton rendering [OFF]"))
+			fmt.Println(chalk.Red.Color("[3] Skeleton		[OFF]"))
 		}
 		if boxRendering {
-			fmt.Println(chalk.Green.Color("[4] Box rendering [ON]"))
+			fmt.Println(chalk.Green.Color("[4] BoxESP		[ON]"))
 		} else {
-			fmt.Println(chalk.Red.Color("[4] Box rendering [OFF]"))
+			fmt.Println(chalk.Red.Color("[4] BoxESP		[OFF]"))
 		}
 		if healthBarRendering {
-			fmt.Println(chalk.Green.Color("[5] Health bar rendering [ON]"))
+			fmt.Println(chalk.Green.Color("[5] Healthbar		[ON]"))
 		} else {
-			fmt.Println(chalk.Red.Color("[5] Health bar rendering [OFF]"))
+			fmt.Println(chalk.Red.Color("[5] Healthbar		[OFF]"))
 		}
 		if healthTextRendering {
-			fmt.Println(chalk.Green.Color("[6] Health text rendering [ON]"))
+			fmt.Println(chalk.Green.Color("[6] HealthESP		[ON]"))
 		} else {
-			fmt.Println(chalk.Red.Color("[6] Health text rendering [OFF]"))
+			fmt.Println(chalk.Red.Color("[6] HealthESP		[OFF]"))
 		}
 		if nameRendering {
-			fmt.Println(chalk.Green.Color("[7] Name rendering [ON]"))
+			fmt.Println(chalk.Green.Color("[7] NameESP		[ON]"))
 		} else {
-			fmt.Println(chalk.Red.Color("[7] Name rendering [OFF]"))
+			fmt.Println(chalk.Red.Color("[7] NameESP		[OFF]"))
 		}
 		fmt.Println(chalk.Cyan.Color("[8] Adjust frame delay [") + fmt.Sprint(frameDelay) + chalk.Cyan.Color("]"))
 		fmt.Println(chalk.Red.Color("[9] Exit"))
