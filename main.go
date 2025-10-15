@@ -231,7 +231,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 			continue
 		}
 		// entityController
-		err = read(procHandle, listEntry+uintptr(120)*uintptr(i&0x1FF), &entityController)
+		err = read(procHandle, listEntry+uintptr(112)*uintptr(i&0x1FF), &entityController)
 		if err != nil {
 			return entities
 		}
@@ -255,7 +255,7 @@ func getEntitiesInfo(procHandle windows.Handle, clientDll uintptr, screenWidth u
 			continue
 		}
 		// entityPawn
-		err = read(procHandle, listEntry+uintptr(120)*uintptr(entityControllerPawn&0x1FF), &entityPawn)
+		err = read(procHandle, listEntry+uintptr(112)*uintptr(entityControllerPawn&0x1FF), &entityPawn)
 		if err != nil {
 			return entities
 		}
